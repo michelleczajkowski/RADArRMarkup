@@ -1,0 +1,5 @@
+library(xml2)
+library(XML)
+mouse <- xmlToDataFrame("mouse.xml")
+mouse <- read.csv("mouse.xml")
+xmlParse(mouse)

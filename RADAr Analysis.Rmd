@@ -47,6 +47,7 @@ odd_one_out_2
 ```
 Further inspection of the csv files shows that for the NWINED20221e administration, one of the dictee items was eliminated from the test results, resulting in a count of 114 items (this was possibly due to an unfair element detected after test administration). As for the LETNED19201e, this test did not have a hotspot item, which accounts for the 114 count. 
 ```{r create admins_nedall, vector of all admin names}
+nedall_col_names <- colnames(nedall)
 admins_nedall <- c(unique(substr(nedall_col_names, 1, 12)))
 admins_nedall
 ```
@@ -119,6 +120,7 @@ for (name in scores_admins) {
 }
 sorted_outliers <- sort (outliers_all)
 print(sorted_outliers)
+
 ```
 Some are quite low - e.g. 7 - this is someone who appears to have abandoned the test after the first section.
 For now, I'll leave the outliers in, but this section can be returned to later on when running analyses. 
@@ -203,7 +205,7 @@ Now I want to add another row with item numbers, derrived above with variable `r
 ITEMS <- c()
 admin_vector <- as.vector(nedallplus1["ADMIN", ])
 
-for (i in 1:ncol(nedallplus)) {
+for (i in 1:ncol(nedallplus1)) {
   admin_value <- admin_vector[i]
   match_row <- match(admin_value, mean_max_table$Admin)
   mean_max_value <- mean_max_table$Mean_Max[match_row]
@@ -302,24 +304,96 @@ Finally, let's transform the last interation of nedallplus (currently nedallplus
 nedallplus <- nedallplus7
 ```
 `r nedallplus` contains information that will now allow us to inspect different forms for differences. We choose to use forms instead of admins because many admins have only a few tts. 
-Let's start by summarizing the Ns for each form:
-```{r for each form, how many tts?}
+To do analyses, we need to transform the data so that the col names are the summary data we've added along with item names. 
+Let's start by summarizing the Ns for each form using variable $FORM to group a summary:
+```{r forms_scores: N, Mean, SD, Min, Max}
+forms <- unlist(as.vector(nedallplus["FORM", ]))
+scores <- as.numeric(unlist(as.vector(nedallplus["PERCENT_SCORE",])))
+
+summary <- forms_scores %>%
+  group_by(FORM) %>%
+  summarise(
+    count = n(),
+    min_score = min(SCORES),
+    max_score = max(SCORES),
+    mean_score = mean(SCORES),
+    sd_score = sd(SCORES)
+  )
+
+# Print the result
+print(summary)
+```
+
+let's look at these in a violin histogram. The red line indicates the average for the overall test, which is stored in variable `r overall_mean`. The chart shows that the individual means for the forms are near but not on the line, indicating that some groups score better on their test form than other groups. Importantly, the test forms are different and the students are siloed, so we cannot yet say that there is an issue of unfairness. Additionally, we do not yet know if these differences are statistically significant. That is the next step. 
+```{r For FORMS - Violin Distribution Chart}
+
+# Calculate means by form
+overall_mean<- forms_scores %>%
+  summarize(mean_score = mean(SCORES))
+
+overall_mean <-unlist(overall_mean)
+cat("overall average:", overall_mean)
+
+
+mean_scores <- forms_scores %>%
+  group_by(FORM) %>%
+  summarise(mean_score = mean(SCORES))
+
+# Create the violin plot
+ggplot(forms_scores, aes(x = FORM, y = SCORES)) +
+  geom_violin(fill = "gray", color = "gray") +
+  geom_hline(aes(yintercept = mean(SCORES)), linetype = "dashed", color = "red") +
+  geom_point(data = mean_scores, aes(x = FORM, y = mean_score), color = "black", size = 3, shape = 19) +
+  labs(title = "Distribution of scores in % by form") +
+  xlab(NULL) +
+  ylab("Scores") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+The appearence of outliers on the lower end is quite apparent here. It is a good idea now to look back at our outlier list and determine a method by which they can be evaluated for exclusion. The variable `r outliers_all`, calculated earlier, contains the outliers: testtaker and score. Below, a new data frame, `r outliers_df` contains these two rows. But first, let's inspect the outliers raw scores. 
+```{r distribution of outliers}
+hist(outliers_all)
+```
+Which should we exclude? Firstly, those who abandon the test. To see this, we need to look at the individual responses to items to see the behaviour. Below, `r outliers_details_collapsed` provides this information. 
+
+```{r exclude outliers? outliers_all}
+
+names_outliers_all <- names(outliers_all)
+outliers_df <- data.frame(testtaker=names_outliers_all, score=outliers_all)
+outliers_details <- nedallplus_t[outliers_df$testtaker,]
+# Collapse the data frame
+outliers_details_collapsed <- as.data.frame(t(apply(outliers_details, 1, function(x) {
+  x <- na.omit(x)
+  c(x, rep(NA, ncol(outliers_details) - length(x)))
+})))
+
+# Print the collapsed data frame
+print(outliers_details_collapsed)
+checkcheck(outliers_details_collapsed)
+```
+We can use this new data frame `r outliers_df`, to capture the individual responses for items for each testtaker and use that to extend the outliers_df. 
+```r{exploring outliers_df: collecting item responses}
+
+
+
+
+# Create a line plot
+plot(scores, type = "l", xlab = "Index", ylab = "Score", main = "Sequence of Scores")
 
 
 ```
-For each of these forms, what are the mean/sd for tt scores (using nedallplus)?
-```{r mean/sd for scores across nedallpluslong$FORM}
+Are any of these differences significant? An ANOVA will help us answer this. There are assumptions about the data that must be checked before the ANOVA is performed. Independence: The data is independent. Normality: There is some question about the normality of the distributions of scores as the tend to be left skewed due to a ceiling effect. Homogeneity of Variance: This will need to be checked as well. Random Sampling: In this case, the sample is the population, so this assumption is met. Let's check now for a normal distribution. 
+```{r normal distribution of scores in forms_scores?}
+results <- split(forms_scores$SCORES, forms_scores$FORM) %>%
+  lapply(shapiro.test)
 
-# mean line
-# mean and sd in axis
-
+# Print the test results
+for (group in unique(forms_scores$FORM)) {
+  print(paste("FORM", group))
+  print(results[[group]])
+}
 ```
-let's look at these in a violin histogram
-```{r}
 
-```
-
-Are any of these differences significant? (anova)
 ```{r}
 #anova
 ```
