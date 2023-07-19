@@ -1,0 +1,1320 @@
+---
+title: RADAr Nederlands
+subtitle: A look at the data from 2019 through 2022
+author: Michelle Czajkowski
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true 
+    theme: cerulean
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(car)
+library(multcompView)
+library(FSA)
+library(dunn.test)
+library(mirt)
+library(equateIRT)
+knitr::opts_chunk$set(
+  fig.width = 5,   # Adjust the width of the individual plots
+  fig.height = 4,  # Adjust the height of the individual plots
+  out.width = "30%",  # Adjust the width of the output container
+  echo = TRUE
+)
+
+```
+# Prepare Dataset
+## Import data
+
+The dataset nedall is retrieved from a csv containing all RADAr NED data (currently to Oct 2023), and transformed so that the responses are numeric or NA. In this data set, each row is an item and each column is a test taker. The column and row IDs contain relevant information about each item or test taker. 
+
+```{r retrieve data from csv}
+nedall <- read.csv("RADArNEDall.csv", row.names=1,header = TRUE)
+```
+## Check values
+The values range from 0 to 8. Most items are dichotomous (0 or 1) and hotspot scores range to 8. No values are unexpected. 
+
+```{r unique values check}
+unique_values <- unique(unlist(lapply(nedall, unique)))
+print(unique_values)
+```
+The set should now be purely numeric. 
+```{r is nedall numeric}
+is_numeric <- sapply(nedall, is.numeric)
+table(is_numeric)
+```
+# Administrations
+## Total items / Admin
+Not every test form is the same. Below we see the total items answered and their distribution amongst all test takers.
+
+``` {r how many items do students answer? max_score_distribution}
+max_score_distribution <- lapply(nedall, function(x) sum(!is.na(x)))
+max_score_distribution2 <- unlist(max_score_distribution)
+table(max_score_distribution2)
+```
+Which administrations do not have a value of 115?
+```{r which admins had only 114 items?}
+odd_one_out_2 <- names(max_score_distribution2)[max_score_distribution2 %in% c(114)]
+odd_one_out_3 <- unique(substr(odd_one_out_2, 1, 12))
+odd_one_out_3
+```
+Further inspection of the csv files shows that for the NWINED20221e administration, one of the dictee items (#4) was eliminated from the test results, resulting in a count of 114 items (this was possibly due to an unfair element detected after test administration). 
+
+As for the LETNED19201e, this test did not have a hotspot item, which accounts for the 114 count. This administration will be dropped from many analyses for this reason. 
+
+## Descriptives / Admin
+Below are the different administrations. The codes for administrations include faculty, language, year, and attempt (oct or march = 1e or 2e)
+
+```{r create admins_nedall, vector of all admin names}
+nedall_col_names <- colnames(nedall)
+admins_nedall <- c(unique(substr(nedall_col_names, 1, 12)))
+admins_nedall
+```
+Below we see how many items there are for each administration, which matches our earlier conclusions. 
+```{r mean_max_table - how many items @ each admin}
+mean_max <- c()
+for (admin in admins_nedall) {
+  admin_columns <- nedall_col_names[grepl(paste0("^", admin), nedall_col_names)]
+  admin_counts <- sum(!is.na(nedall[, admin_columns]))
+  admin_mean <- admin_counts / length(admin_columns)
+  mean_max <- c(mean_max, admin_mean)
+}
+mean_max_table <- data.frame(Admin = admins_nedall, Mean_Max = mean_max)
+mean_max_table
+
+``` 
+We can now group test scores by administration.
+```{r group indiv scores by admin}
+nedall_col_sums <- colSums(nedall, na.rm=TRUE)
+for (admin in admins_nedall) {
+  x <- colnames(nedall)[grep(paste0("^", admin), colnames(nedall))]
+  y <- nedall_col_sums[names(nedall_col_sums) %in% x]
+  assign(paste0(admin, "_scores"), y)
+}
+scores_admins <- c()
+for (admin in admins_nedall) {
+  x <- paste0(admin, "_scores")
+  scores_admins <- c(scores_admins, x)
+}
+``` 
+Histograms show the distribution of raw scores for each administration.  
+```{r histograms for scores x admins}
+# Set the bin width you want (e.g., 5)
+bin_width <- 5
+x_axis_range <- c(0, 115)  # Set the desired x-axis range
+x_axis_ticks <- seq(0, 115, by = 5)  # Generate ticks at intervals of 5
+
+for (name in scores_admins) {
+  x <- get(name)
+  y <- length(x)
+  hist(x, main = "", breaks = seq(min(x), max(x) + bin_width, by = bin_width), xlim = x_axis_range, xaxt = "n")
+  title(paste0(name, " N=", y))
+  axis(1, at = x_axis_ticks)
+}
+
+``` 
+
+And the boxplots. 
+
+```{r boxplots for scores x admins}
+
+for (name in scores_admins) {
+  x <- get(name)
+  y <- length(x)
+  boxplot(x, main = "", width = 3)
+  title(paste0(name, "\n N =", y))
+}
+
+``` 
+
+# Outliers
+The boxplots reveal a number of outliers at the lower end of the score range. 
+
+This test is required, but has no consequences. It is possible that some students did not seriously attempt the test, perhaps abandoning it halfway through or skipping sections. It is important to identify these and remove them so that all outlying scores are accurate representations of ability. 
+
+72 outliers are identified below, and are stored for future inspection.
+
+```{r identifying outliers, error=TRUE}
+outliers_all <- c() 
+for (name in scores_admins) {
+  x <-get(name)
+  # Calculate the interquartile range (IQR)
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- q3 - q1
+
+# Define the lower and upper bounds for outliers
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+
+# Identify outliers
+  outliers <- x[x < lower_bound | x > upper_bound]
+  outliers_all<- c(outliers_all, outliers)
+# Print the outliers
+
+}
+sorted_outliers <- sort (outliers_all)
+# Create histogram with bins of width 5
+length(sorted_outliers)
+hist(sorted_outliers, breaks = seq(min(sorted_outliers), max(sorted_outliers) + 5, by = 5))
+
+```
+
+```{r checkcheck(df), echo=FALSE}
+checkcheck <- function(df) {
+  # Write the data frame to a CSV file
+  write.csv(df, file = "checkcheck.csv")
+  shell.exec("checkcheck.csv")
+}
+``` 
+# Expand Dataset
+We can now create nedallplus, a data frame which has additional information for each candidate in a number of new rows.
+New rows: ADMIN, NUMBER_ITEMS, FORM, MAX_SCORE, RAW_SCORE, PERCENT_SCORE 
+
+```{r  nedallplus - add row ADMIN}
+column_names <- colnames(nedall)
+ADMIN <- substr(column_names, 1, 12)
+nedallplus1 <- rbind(ADMIN, nedall)
+rownames(nedallplus1)[1] <- "ADMIN"
+```
+
+```{r add row: Number Items Answered <- nedallplus2}
+ITEMS <- c()
+admin_vector <- as.vector(nedallplus1["ADMIN", ])
+for (i in 1:ncol(nedallplus1)) {
+  admin_value <- admin_vector[i]
+  match_row <- match(admin_value, mean_max_table$Admin)
+  mean_max_value <- mean_max_table$Mean_Max[match_row]
+  ITEMS <- c(ITEMS, mean_max_value)
+}
+nedallplus2 <- rbind(ITEMS,nedallplus1)
+rownames(nedallplus2)[1] <- "NUMBER_ITEMS"
+```
+More information about FORM
+```{r create admin to form matrix for lookup purposes (forms_to_admins_vector)}
+forms_to_admins_vector <- c("FTRNED21221e","FTRNED(A)",
+                            "FTRNED22231e","FTRNED(A)",
+                            "LETNED19201e","LETNED(A)",
+                            "LETNED20211e","LETNED(B)",
+                            "LETNED21221e", "LETNED(B)",
+                            "LETNED22231e", "LETNED(B)",
+                            "LETNED20212e", "LETNED(C)", 
+                            "LETNED21222e", "LETNED(C)",
+                            "MANNED20211e", "MANNED(A)",
+                            "MANNED21221e", "MANNED(A)",
+                            "MANNED21222e", "MANNED(A)",
+                            "MANNED22231e", "MANNED(B)",
+                            "MEDNED21221e", "MEDNED(A)",
+                            "MEDNED22231e", "MEDNED(A)",
+                            "NWINED21221e", "NWINED(A)", 
+                            "NWINED22231e", "NWINED(A)",
+                            "SOWNED22231e", "SOWNED(A)")
+forms_admins_matrix <- matrix(forms_to_admins_vector,ncol=2,byrow=TRUE)
+forms_admins_matrix <- as.data.frame(forms_admins_matrix)
+names<- c("ADMIN", "FORM")
+rownames(forms_admins_matrix) <- NULL
+colnames(forms_admins_matrix) <- names
+print(forms_admins_matrix)
+```
+```{r add row FORM to nedallplus2}
+FORM <- c()
+admin_vector <- as.vector(nedallplus2["ADMIN", ])
+for (i in 1:ncol(nedallplus2)) {
+  admin_value <- admin_vector[i]
+  match_row <- match(admin_value, forms_admins_matrix[,1])
+  form_value <- forms_admins_matrix[,2][match_row]
+  FORM <- c(FORM, form_value)
+}
+nedallplus3 <- rbind(FORM, nedallplus2)
+rownames(nedallplus3)[1]<- "FORM"
+``` 
+The hotspot items are the only non-dichotomous items. Therefore the NUMBER_ITEMS row does not actually give us the maximum score for each form/admin. Cross-referencing all NED hotspot items in use in Cirrus confirms that all have a max of 7. in'to Languages has a way to adjust this to a max of 8, so scores in the data have a max of 8. However, one form - LETNED(A) - does not have a hotspot at all, so the NUMBER_ITEMS is actually the max. 
+
+The vector hotspot_max contains the max hotspot scores for all administrations. This is used to create MAX_SCORE.
+
+```{r forms_admins_hotspots_matrix - hotspot points max by admin and form}
+hotspot_max <- c(8,8,0,8,8,8,8,8,8,8,8,8,8,8,8,8,8)
+forms_admins_hotspots_matrix <- cbind(forms_admins_matrix, hotspot_max)
+```
+```{r nedallplus4 - new row MAX_SCORE} 
+hotspot_max <- c()
+admin_vector <- as.vector(nedallplus2["ADMIN", ])
+for (i in 1:ncol(nedallplus3)) {
+  admin_value <- admin_vector[i]
+  match_row <- match(admin_value, forms_admins_hotspots_matrix[,1])
+  form_value <- forms_admins_hotspots_matrix[,3][match_row]
+  hotspot_max <- c(hotspot_max, form_value)
+}
+
+nedallplus4 <- rbind(hotspot_max, nedallplus3)
+rownames(nedallplus4)[1]<- "HSPOT_MAX"
+# calculate row MAX_SCORE
+x <- as.vector(as.numeric(nedallplus4["HSPOT_MAX",]))
+y <- as.vector(as.numeric(nedallplus4["NUMBER_ITEMS",]))
+z <- c(x+y)
+nedallplus5 <- rbind(z, nedallplus4)
+rownames(nedallplus5)[1]<- "MAX_SCORE"
+```
+```{r RAW_SCORE added}
+col_sum <- c()
+for (i in 1:ncol(nedallplus5)) {
+  x <- nedallplus5[6:nrow(nedallplus5),i]
+  y <- as.numeric(x)
+  z <- sum(y, na.rm=TRUE)
+  col_sum <- c(col_sum, z)
+}
+nedallplus6 <- rbind(col_sum, nedallplus5)
+rownames(nedallplus6)[1]<- "RAW_SCORE"
+```
+```{r PERCENT_SCORE added}
+x <- as.vector(as.numeric(nedallplus6["MAX_SCORE",])) 
+y <- as.vector(as.numeric(nedallplus6["RAW_SCORE",]))
+z <- c(y/x)
+nedallplus7 <- rbind(z, nedallplus6)
+rownames(nedallplus7)[1]<- "PERCENT_SCORE"
+```
+The new dataset is data frame nedallplus
+```{r - TRANSFORM to nedallplus}
+nedallplus <- nedallplus7
+
+```
+# Descriptives / Form
+A summary of all forms:
+```{r forms_scores: N, Mean, SD, Min, Max}
+forms <- unlist(as.vector(nedallplus["FORM", ]))
+scores <- as.numeric(unlist(as.vector(nedallplus["PERCENT_SCORE",])))
+forms_scores <- data.frame(FORM=forms,SCORES=scores)
+
+summary <- forms_scores %>%
+  group_by(FORM) %>%
+  summarise(
+    count = n(),
+    min_score = round(min(SCORES), 2),
+    max_score = round(max(SCORES), 2),
+    mean_score = round(mean(SCORES), 2),
+    sd_score = round(sd(SCORES), 2)
+  )
+
+# Print the result
+print(summary)
+```
+The violin charts below show the distribution of scores per form. 
+
+The red line is the average for the overall test and the black dots show the form means. 
+```{r For FORMS - Violin Distribution Chart, out.width="300%", fig.height=10, fig.width=15}
+
+# Calculate means by form
+overall_mean<- forms_scores %>%
+  summarize(mean_score = mean(SCORES))
+
+overall_mean <-unlist(overall_mean)
+cat("overall average:", overall_mean)
+
+
+mean_scores <- forms_scores %>%
+  group_by(FORM) %>%
+  summarise(mean_score = mean(SCORES))
+
+# Create the violin plot
+ggplot(forms_scores, aes(x = FORM, y = SCORES)) +
+  geom_violin(fill = "gray", color = "gray") +
+  geom_hline(aes(yintercept = mean(SCORES)), linetype = "dashed", color = "red") +
+  geom_point(data = mean_scores, aes(x = FORM, y = mean_score), color = "black", size = 3, shape = 19) +
+  labs(title = "Distribution of RADAr NED scores in % by form\nwith overall mean and form mean") +
+  xlab(NULL) +
+  ylab("Scores") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+# Remove outliers
+The appearence of outliers is quite clear in the violin charts above, and are likely skewing figures. 72 outliers were identified earlier. Now, we will see which make sense to remove. 
+
+```{r distribution of outliers}
+hist(outliers_all, 
+     breaks = seq(min(sorted_outliers), max(sorted_outliers) + 1, by = 1),
+     main = paste("Histogram of outliers_all (N =", length(outliers_all), ")"))
+```
+
+For this iteration, I saved this file with the date "outliers_excel_20230713", and visually inspected the data
+
+```{r exclude outliers? outliers_all}
+
+nedallplus_t <- t(nedallplus) 
+names_outliers_all <- names(outliers_all)
+outliers_df <- data.frame(testtaker=names_outliers_all, score=outliers_all)
+outliers_details <- nedallplus_t[outliers_df$testtaker,]
+# Collapse the data frame
+outliers_details_collapsed <- as.data.frame(t(apply(outliers_details, 1, function(x) {
+  x <- na.omit(x)
+  c(x, rep(NA, ncol(outliers_details) - length(x)))
+})))
+
+#create excel sheet by running below code:
+#write.csv(outliers_details_collapsed, "outliers_excel.csv")
+
+```
+Which should we exclude?
+
+1) Abandonment, defined as all 0s in the last or last two sections.
+
+FTRNED21221e8
+FTRNED21221e29
+LETNED21222e63
+MANNED20211e680
+MANNED21221e277
+MANNED21222e16
+MEDNED21221e71
+
+2) Sections Skipped, defined as having sections of all 0s in an otherwise normal looking test response. 
+
+LETNED19201e3
+LETNED19201e40
+MANNED21222e3
+MANNED22231e516
+MANNED22231e70
+MEDNED22231e412
+NWINED21221e76
+SOWNED22231e792
+SOWNED22231e793
+
+3) Other 
+
+Remaining outliers are arranged from lowest to highest score. No high scoring outliers are removed from the set. Response patterns of low scoring outliers who were not flagged in the previous two steps were inspected. Two further were flagged for removal: 
+
+MANNED22231e71
+MANNED22231e262
+
+The excel file outliers_excel_20230713.xlsx contains the data for this process, with the abandoned tests flagged in orange, the section abandonments flagged on yellow, and suspicious low scorers in blue. The list is preserved in outliers_excel_20230713_list.csv for access by r. 
+
+The new dataset is nedallplus_no_outliers. 
+
+```{r nedallplus_no_outliers: removed outliers, echo=FALSE, results='hide'}
+outlier_list <- read.csv("outliers_excel_20230713_list.csv")
+outlier_list <- names(outlier_list) # makes a vector
+col_nums_outliers <- which(names(nedallplus) %in% outlier_list)
+#let's check to make sure the cols match the names in the outliers_list
+x<- names(nedallplus[,col_nums_outliers])
+setequal(x, outlier_list)
+#They match. Now we can use col_nums_outliers to remove outliers and create the new data frame
+nedallplus_no_outliers <- nedallplus[, -col_nums_outliers]
+# let's double check 
+ncol(nedallplus) - ncol(nedallplus_no_outliers)
+# the answer, 19, is correct as there were 19 outliers I wished removed. 
+```
+# Descriptives / Form (no outliers)
+Now, let's rerun our descriptive stats and violin charts, using the nedallplus_no_outliers data set. 
+```{r descriptive table (nedallplus_no_outliers)}
+forms2 <- unlist(as.vector(nedallplus_no_outliers["FORM", ]))
+scores2 <- as.numeric(unlist(as.vector(nedallplus_no_outliers["PERCENT_SCORE",])))
+forms_scores2 <- data.frame(FORM=forms2, SCORES=scores2)
+
+summary <- forms_scores2 %>%
+  group_by(FORM) %>%
+  summarise(
+    count = n(),
+    min_score = round(min(SCORES),2),
+    max_score = round(max(SCORES),2),
+    mean_score = round(mean(SCORES),2),
+    sd_score = round(sd(SCORES),2)
+  )
+
+# Print the result
+print(summary)
+```
+The min scores show the influence of having the outliers removed. The adjusted overall average and violin chart is below.
+
+```{r nedall_no_outliers violin distribution chart, out.width="300%", fig.height=10, fig.width=15}
+
+# Calculate means by form
+overall_mean2<- forms_scores2%>%
+  summarize(mean_score = mean(SCORES))
+
+overall_mean2 <-unlist(overall_mean2)
+cat("overall average:", overall_mean2)
+
+
+mean_scores2 <- forms_scores2 %>%
+  group_by(FORM) %>%
+  summarise(mean_score = mean(SCORES))
+
+# Create the violin plot
+ggplot(forms_scores2, aes(x = FORM, y = SCORES)) +
+  geom_violin(fill = "gray", color = "gray") +
+  geom_hline(aes(yintercept = mean(SCORES)), linetype = "dashed", color = "red") +
+  geom_point(data = mean_scores, aes(x = FORM, y = mean_score), color = "black", size = 3, shape = 19) +
+  labs(title = "Distribution of scores in % by form") +
+  xlab(NULL) +
+  ylab("Scores") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+
+# Differences in Mean: Form
+Are any of these differences significant? An ANOVA will help us answer this. 
+## ANOVA assumptions
+There are assumptions about the data that must be checked before the ANOVA is performed. Independence: The data is independent. Normality: There is some question about the normality of the distributions of scores as the tend to be left skewed due to a ceiling effect. Homogeneity of Variance: This will need to be checked as well. Random Sampling: In this case, the sample is the population, so this assumption is met. 
+ANOVAs are robust against non-normal distribution but we can still check. Kolmogorov–Smirnov is used for larger sample sizes (rather than Shapiro Wilk), but cannot handle data with tied values (which this data has). 
+
+Can we assume normality? perhaps we can inspect skew and kurtosis. If the skewness is negative, this indicates that the distribution is left-skewed. If the kurtosis is greater than 3, this indicates that the distribution has more values in the tails compared to a normal distribution (is flatter).
+
+The table below shows all forms, with N, skew and kurtosis and mean(red) / median(blue) lines. Each form's histogram is shown for reference. While one form has a high kurtosis, there do not appear to be any curves which vary too far from normal distribution...?
+
+```{r normal distribution of scores in forms_scores2}
+library(moments)
+results<- c()
+for (group in unique(forms_scores2$FORM)) {
+  scores <- forms_scores2$SCORES[forms_scores2$FORM == group]  # Subset scores for the current group
+  skew <- skewness(scores)
+  kurt <- kurtosis(scores)
+  results<- c(results, group, length(scores), skew, kurt) 
+  hist(scores, main = group)
+  # Calculate the mean and median
+  mean_score <- mean(scores)
+  median_score <- median(scores)
+
+  # Add the mean line
+  abline(v = mean_score, col = "red", lwd = 2)
+
+  # Add the median line
+  abline(v = median_score, col = "blue", lwd = 2)
+}
+
+results_table <- matrix(results, ncol=4, byrow=TRUE)
+colnames(results_table) <- c("Form", "N", "Skewness", "Kurtosis")
+results_table
+```
+Based on these charts, and the robustness of ANOVA against non-normality, I believe this is OK. As for the assumption Homogeneity of Variance, inspection of boxplots will confirm or not.
+
+```{r Homogeneity of Variance, fig.width=15, fig.height=10, fig.align='center', out.width="300%"}
+# Create side-by-side boxplots
+boxplot(SCORES ~ FORM, data = forms_scores2, 
+        main = "Homogeneity of Variance",
+        xlab = "Group", ylab = "SCORES")
+
+# Add a reference line at the overall median
+overall_median <- median(forms_scores2$SCORES)
+abline(h = overall_median, col = "red", lwd = 2)
+
+
+```
+
+It appears as if the spreads are quite similar, and there is no violation of the assumption. 
+
+However, we can test with Levene's test: 
+``` {r Levene Test, warning=FALSE}
+leveneTest(SCORES ~ FORM, data = forms_scores2)
+```
+The p-value is very small (6.279e-06), indicating strong evidence against the null hypothesis. Therefore, we can conclude that there is evidence of heterogeneity of variances among the groups based on Levene's test.
+
+Let's investigate now the magnitude of Heterogeneity: The larger the differences in variances among groups, the more serious the violation of the assumption. Large differences in variances can affect the precision of the estimated group means and can lead to biased estimates of the treatment effects.
+
+```{r Magnitude of Heterogeneity investigated visually, fig.width=6,fig.height=4, fig.align='center', out.width="200%"}
+group_variances <- tapply(forms_scores2$SCORES, forms_scores2$FORM, var)
+group_sd <- tapply(forms_scores2$SCORES, forms_scores2$FORM, sd)
+
+# Density plot
+library(ggplot2)
+ggplot(forms_scores2, aes(x = SCORES, fill = FORM)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal()
+
+# Boxplot
+ggplot(forms_scores2, aes(x = FORM, y = SCORES)) +
+  geom_boxplot() +
+  theme_minimal()
+
+```
+
+From the density plot, it seems as if one form LETNED(B) has a different variance than the other forms. ANOVA is fairly robust in terms of the error rate when sample sizes are equal. However, when sample sizes are unequal, ANOVA is not robust to violations of homogeneity of variance. As the sample size of the groups FORM are quite varied, this heterogeneity of variance may be an issue. 
+Let's run the ANOVA anyhow, and compare reults later with a non-parametric test. 
+## ANOVA (means/form)
+```{r ANOVA}
+anova_result <- aov(SCORES ~ FORM, data = forms_scores2)
+summary(anova_result)
+```
+The p-value is extremely small (<2e-16), indicating strong evidence against the null hypothesis. Therefore, you can conclude that there are significant differences among the groups based on the ANOVA results.
+
+Now, let's do some post-hoc tests to see where these differences are. 
+
+```{r posthoc tukey, fig.width=7,fig.align='center'}
+posthoc_tukey <- TukeyHSD(anova_result)
+```
+Let's inspect this graphically:
+
+```{r posthoc_tukey represented in boxplots, out.width="200%", fig.align='center'}
+par(mar = c(4, 8, 4, 2) + 0.1)
+plot(posthoc_tukey, las = 1, col = "brown", cex.axis = 0.5)
+
+```
+
+The x-axis here represents difference in mean % score, so 0.05 represents a 5 point difference in a score of 100. 
+
+Let's look only at the significant differences, arranged by difference in mean between groups. 
+
+```{r - only significant, arranged by diff in mean}
+x <- as.data.frame(posthoc_tukey$FORM)
+
+# Add a new column 'is_sig' based on 'p.adj' values
+x$sig <- x$'p adj' <= 0.05
+
+# Print the updated data frame
+
+x <- x[order(x$diff), ]
+y <- x[x$sig, ]
+z <- arrange(y, diff)
+z
+```
+Let's have a look at the significant difference in means in a graphical form:
+
+```{r significant diff min means graphed, fig.width=15, fig.height=15,fig.align='center', out.width="300%"}
+
+z <- z %>% 
+  mutate(row_order = row_number())
+
+# Sort the data frame based on the 'diff' column
+z <- arrange(z, diff)
+
+plot <- ggplot(z, aes(x = diff, y = row_order)) +
+  geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2) +
+  geom_point(size = 2) +
+  geom_text(aes(label = rownames(z)), vjust = -.8,  size = 2) +  # Add row names as text
+  labs(title = "Significant Mean Differences between Forms",
+       x = "Mean Difference",
+       y = "Row")
+  
+
+plot <- plot + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+                     axis.title.y = element_blank(),
+                     axis.text.y = element_blank(),
+                     axis.ticks.y = element_blank())
+
+# Display the plot
+print(plot)
+```
+
+It appears as if there are some significant differences in means between groups, which largely fall between 2.5 points and 5 points on a 100 point test. The difference between the two MANNED forms, however, shows a difference in over 7 points, and these two forms show significant differences with many other forms as well. 
+
+As we had some earlier concerns about the use of the ANOVA as the data violates some of its assumptions, let's explore a non-parametric alternative.
+
+## Kruskal-Wallis
+The Kruskal-Wallis test is a non-parametric statistical test used to determine if there are any statistically significant differences between three or more independent groups. It is an extension of the Mann-Whitney U test, which is used to compare two independent groups. The Kruskal-Wallis test is suitable when the data do not meet the assumptions of parametric tests, such as the assumption of normality or equal variances.
+
+The Kruskal-Wallis test is a hypothesis test that compares group medians, not means. If the test suggests significant differences between the groups, further post-hoc tests (e.g., Dunn's test) can be conducted to identify which specific groups differ significantly from each other.
+
+First, let's inspect the medians. 
+
+```{r Kruskal-Wallis test : Descriptive : medians}
+
+medians <- aggregate(SCORES ~ FORM, data = forms_scores2, FUN = median)
+medians_ordered <- medians %>%
+  arrange(desc(SCORES))
+
+
+# Print the ordered medians
+print("The median scores of all forms in descending order")
+print(medians_ordered)
+
+```
+The differences are around 0.08 (8 points), and this spread and the figures match very closely to mean scores. 
+```{r}
+
+# Perform the Kruskal-Wallis test
+kruskal_result <- kruskal.test(SCORES ~ FORM, data = forms_scores2)
+```
+The Kruskal-Wallis test revealed a significant difference among the groups based on the scores (chi-squared = 579.33, df = 8, p < 0.001). For a post-hoc analysis, I used Dunn's test.
+```{r Dunn post-hoc : dunn_result (bonferroni)}
+# Perform Dunn's test as a post-hoc test
+dunn_result <- dunn.test(forms_scores2$SCORES, g = forms_scores2$FORM, method = "bonferroni")
+
+# Display the post-hoc test results
+#print(dunn_result)
+```
+## Tukey vs Dunn sig pairs
+Let's compare the values for the Tukey (means) and the Dunn (median) tests. 
+```{r, echo=FALSE}
+# create df for dunn results:
+comparisons <- as.vector(dunn_result$comparisons)
+diff_median <- as.vector(dunn_result$P.adjusted)
+sig <- as.vector(dunn_result$P.adjusted <= 0.05)
+dunn_summary <- data.frame(comparisons,diff_median, sig)
+
+dunn_summary_filtered <- dunn_summary %>% filter(sig == TRUE)
+dunn_summary_filtered
+```
+
+```{r compare dunn and tukey, results='hold'}  
+dunn_pairs <- dunn_summary_filtered$comparisons
+tukey_pairs <- rownames(z)
+dunn_pairs <- gsub(" ", "", dunn_pairs)
+dunn_pairs <- sub("(.*)-(.*)", "\\2-\\1", dunn_pairs)
+dunn_pairs <- sort(dunn_pairs)
+tukey_pairs <- sort(tukey_pairs)
+# Assuming you have vectors named dunn_pairs and tukey_pairs
+
+# Compare elements and identify those present in dunn_pairs but not in tukey_pairs
+in_dunn_not_in_tukey <- setdiff(dunn_pairs, tukey_pairs)
+
+# Compare elements and identify those present in tukey_pairs but not in dunn_pairs
+in_tukey_not_in_dunn <- setdiff(tukey_pairs, dunn_pairs)
+
+# Print the results
+cat("Length of dunn_pairs: ", length(dunn_pairs), "\n")
+cat("Length of tukey_pairs: ", length(tukey_pairs), "\n")
+cat("Elements in dunn_pairs but not in tukey_pairs:", in_dunn_not_in_tukey, "\n")
+cat("Elements in tukey_pairs but not in dunn_pairs:", in_tukey_not_in_dunn, "\n")
+``` 
+The significant pairs are the same for both ANOVA/Tukey's (means) and Kruskal-Wallis, Dunn's (medians). I am comfortable assuming that these 19 pairs (and only these 19 pairs, out of 36 pairs total) are significantly different. 
+```{r list of significantly different groups}
+#dunn_pairs 
+```
+### Differences between forms - summary
+Because the two tests (ANOVA and Kruskal-Wallis) have such similar results, I feel comfortable accepting the Tukey Test results as indications of the difference in means. The extent to which this matters has to do with the fact that the test has some different items and is taken by different students. Some programs may have stricter and higher admissions requirements, and therefore their students may do better than those from another faculty with lower admittance criteria, or similar reasons. Fortunately, the test items are about 50/50 common (in all test forms for a particular year) and tailored (crafted to reflect context in the faculty). That means we can explore things on this level to see the differences in forms on common items only, and use this to investigate the effect of the tailored items. This in essence is test form equating, and will be later explored in a Rasch analysis. 
+
+# Common Forms
+All forms have some common items. Some forms have the same common items. Forms with the same common items can be equated to see what the effect of tailored items are later on. 
+
+## Items / Form
+First, let's create a data frame (form_items) containing the ids of all items for each form. Inspection of the column names shows the first candidate from each of the 9 forms.
+```{r create form_items which contains item ids for all forms, echo=FALSE}
+forms <- unique(as.character(nedallplus_no_outliers[5, -1]))
+form_cols <- c()
+form_row <- nedallplus_no_outliers[5,]
+form_cols <- vector("integer", length(forms))
+for (i in seq_along(forms)) {
+  form_name <- forms[i]
+  # Find the first occurrence of 'form_name' in the 'form_row' vector
+  column_position <- which(form_row == form_name)[1]
+  # Store the column position in the 'form_cols' vector
+  form_cols[i] <- column_position
+}
+# Create the 'form_items' data frame by selecting columns based on 'form_cols'
+form_items <- nedallplus_no_outliers[, form_cols]
+row.names(form_items) <- make.unique(row.names(form_items))
+rows_to_delete <- c(1, 2, 3, 4, 6, 7) #the summary stat rows are not needed
+form_items <- form_items[-rows_to_delete, ]
+colnames(form_items)
+```
+## The 6 'Common' Forms
+Six forms use the same COMMON items. These are:
+FTRNED(A), LETNED(B), MANNED(B), MEDNED(A), NWINED(A), SOWNED(A).
+
+Notes: NWINED(A) has that one removed dictee item 4. This should be removed for all forms when comparisons are made.
+
+Notes: LETNED(B) uses a different item: Rn-Lees-Log-TekstVerband-02_ while the others use Rn-Lees-Log-TekstVerband-2. These two items are identical except that one distractor is different. We will use them as if they are the same, while recognizing that they are only nearly the same.
+
+Form_items_overlap: the col names below show the six forms.
+```{r form_items_overlap - those six forms that share common items}
+forms_to_delete <- c(2,4,5)
+form_items_overlap <- form_items[, -forms_to_delete]
+colnames(form_items_overlap)
+```
+## New Column commontailored
+It will be useful to isolate the types of items that are common and the type that are tailored. This process is somewhat complicated as the naming convention used for item IDs is not always regular. I use a system in which a string is searched for within an Item ID to classify it. This circumvents the problem that item IDs do not always follow the same format.
+
+Common items: drogreden, signaalwoorden, tekstargument, tekstbegrip, tekstverband, woordbetekenis, samenvatting, dictee, interpunctie.
+
+Tailored items: hotspot, juistofonjuist, kiesvorm, lezing, voorzetsels.
+
+```{r vector search_terms_common}
+search_terms_common <- c("drog", "signaal", "argument", "begrip", "verband", "betekenis", "samenvat", "dictee", "woordvorm", "interp")
+search_terms_tailored <- c("hotspot", "juist", "kiesvorm", "lezing", "voorzet")
+search_terms_all <- c("drog", "signaal", "argument", "begrip", "verband", "betekenis", "samenvat", "dictee", "woordvorm", "interp","hotspot", "juist", "kiesvorm", "lezing", "voorzet")
+```
+
+```{r new column common or tailored}
+# Create a new column with NA values
+nedallplus_no_outliers_2 <- nedallplus_no_outliers
+nedallplus_no_outliers_2$commontailored <- NA
+# Search for common terms and assign "common" to the new column where matched
+for (term in search_terms_common) {
+  match_rows <- grepl(term, rownames(nedallplus_no_outliers_2), ignore.case = TRUE)
+  nedallplus_no_outliers_2$commontailored[match_rows] <- "common"
+}
+# Search for tailored terms and assign "tailored" to the new column where matched
+for (term in search_terms_tailored) {
+  match_rows <- grepl(term, rownames(nedallplus_no_outliers_2), ignore.case = TRUE)
+  nedallplus_no_outliers_2$commontailored[match_rows] <- "tailored"
+}
+last_col_index <- ncol(nedallplus_no_outliers_2)
+# Move the last column to the first position
+nedallplus_no_outliers_2 <- cbind(nedallplus_no_outliers_2[, last_col_index], nedallplus_no_outliers_2[, -last_col_index])
+colnames(nedallplus_no_outliers_2)[1] <- "commontailored"
+
+```
+A new column in the dataset contains common or tailored for each item. 
+
+## Comparing Commmon Means
+```{r calculate the % score for common items only }
+common_items <- nedallplus_no_outliers_2[nedallplus_no_outliers_2$commontailored %in% c("common", NA), ]
+# delete the problematic dictee 4
+common_items <- common_items[rownames(common_items) != "Rn-Schr-Sp-Dictee-04", ]
+
+common_items <- common_items[,-1]
+rownames <- rownames(common_items)
+# Subset the data to include rows from row 8 and columns from column 2 onward
+selected_data <- common_items[8:nrow(common_items), 1:ncol(common_items)]
+# Convert each column to numeric using sapply
+selected_data <- sapply(selected_data, as.numeric)
+# Calculate the column sums for the selected data
+column_sums <- colSums(selected_data, na.rm = TRUE)
+column_counts <- colSums(!is.na(selected_data))
+common_perc_row <- column_sums/column_counts
+common_items_2 <- rbind(common_perc_row, common_items)
+rownames(common_items_2) <- c("COMMON_PERC", rownames)
+
+```
+The means of the common items of these six forms shows that for these identical forms, there remains some difference in means, though not large.
+
+LETNED(A) stands out. An inspection of the data set shows that for one 6-point section Rn-Schr-Sp-WoordVorm-01, there were no points for these test takers, showing that this item was either not given, or removed, or something else has gone wrong in the data. The values in the table should not be seen as a correct representation of performance.
+
+```{r compare group means and other descriptive stats for all forms}
+common_items_3 <- as.data.frame(t(common_items_2))
+common_items_3$COMMON_PERC <- as.numeric(common_items_3$COMMON_PERC)
+statistics_df <- common_items_3 %>%
+  group_by(FORM) %>%
+  summarise(N = n(),
+            mean = mean(COMMON_PERC),
+            median = median(COMMON_PERC),
+            SD = sd(COMMON_PERC, na.rm=TRUE))
+
+# Step 2: Display statistics in table format
+print(statistics_df)
+```
+A violin chart shows the distributions of performance on these forms when only common items are graded.
+
+```{r violin chart, out.width="300%", fig.height=10, fig.width=15, fig.align='center'}
+ggplot(common_items_3, aes(x = FORM, y = COMMON_PERC)) +
+  geom_violin() +
+  geom_point(data = statistics_df, aes(y = mean), size = 3, color = "red") +
+  geom_text(data = statistics_df, aes(y = mean, label = round(mean, 2)), vjust = -0.7, size = 3, fontface = "bold") +
+  
+  labs(x = "FORM", y = "COMMON_PERC", title = "Distribution of scores on common items across forms") +
+  theme_minimal()
+```
+
+Remember that not all these forms contain the same common items. Let's restrict the data to those forms that share common items.
+
+```{r create new data frame with only the 6 forms that share common items, echo=FALSE, results='hide'}
+form_items_unique <- c("FTRNED(A)", "LETNED(B)",  "MANNED(B)","MEDNED(A)" ,"NWINED(A)", "SOWNED(A)")
+print(form_items_unique)
+
+
+matched_form_common_items <- common_items_3 %>%
+  filter(FORM %in% form_items_unique)
+
+print(unique(matched_form_common_items$FORM))
+
+```
+The descriptive statistics for these six forms (common only), ordered by mean score:
+
+```{r table of descriptive stats for 6 forms common items score}
+matched_form_common_items$COMMON_PERC <- as.numeric(matched_form_common_items$COMMON_PERC)
+statistics_df <- matched_form_common_items %>%
+  group_by(FORM) %>%
+  summarise(N = n(),
+            mean = mean(COMMON_PERC),
+            median = median(COMMON_PERC),
+            SD = sd(COMMON_PERC, na.rm=TRUE)) %>%
+  arrange(mean)
+
+# Step 2: Display statistics in table format
+print(statistics_df)
+```
+The violin chart
+```{r violin chart for the 6 forms common items scores, out.width="300%", fig.align='center', fig.height=10, fig.width=15}
+ggplot(matched_form_common_items, aes(x = FORM, y = COMMON_PERC)) +
+  geom_violin() +
+  geom_point(data = statistics_df, aes(y = mean), size = 3, color = "red") +
+  geom_text(data = statistics_df, aes(y = mean, label = round(mean, 2)), vjust = -0.7, size = 3, fontface = "bold") +
+  
+  labs(x = "FORM", y = "COMMON_PERC", title = "Distribution of scores on common items across shared-item forms") +
+  theme_minimal()
+```
+Some of the violins are truncated. To double check the data, let's look at this data in another way - individual histograms of the scores.
+```{r histograms common items 6 forms, out.width="300%", fig.align='center', fig.height=10, fig.width=15}
+ggplot(matched_form_common_items, aes(x = COMMON_PERC)) +
+  geom_histogram(binwidth = 0.01) +
+  facet_wrap(~ FORM, ncol = 2, scales = "free") +
+  labs(x = "COMMON_PERC", y = "Count", title = "Distribution of scores on common items\nacross 6 shared-item forms") +
+  theme_minimal()
+
+
+```
+
+
+```{r histograms + skew and kurtosis for 6 forms common items scores}
+results<- c()
+for (group in unique(matched_form_common_items$FORM)) {
+  scores <- matched_form_common_items$COMMON_PERC[matched_form_common_items$FORM == group]  # Subset scores for the current group
+  skew <- skewness(scores)
+  kurt <- kurtosis(scores)
+  results<- c(results, group, length(scores), skew, kurt) 
+  hist(scores, main = group, breaks=(30))
+  # Calculate the mean and median
+  mean_score <- mean(scores)
+  median_score <- median(scores)
+
+  # Add the mean line
+  abline(v = mean_score, col = "red", lwd = 2)
+
+  # Add the median line
+  abline(v = median_score, col = "blue", lwd = 2)
+}
+
+results_table <- matrix(results, ncol=4, byrow=TRUE)
+colnames(results_table) <- c("Form", "N", "Skewness", "Kurtosis")
+results_table
+```
+From the chart, we can see that FTRNED(A) is indeed the most irregular, followed by LETNED(B). The other four seem to have normal distribution. Let's run the non-parametric test, Levene's test. 
+
+```{r Kruskal Wallis test on the 6 forms common items}
+kruskal_result <- kruskal.test(COMMON_PERC ~ FORM, data = matched_form_common_items)
+print(kruskal_result)
+# Perform Dunn's test as a post-hoc test
+dunn_result <- dunn.test(matched_form_common_items$COMMON_PERC, g = matched_form_common_items$FORM, method = "bonferroni")
+
+comparisons <- as.vector(dunn_result$comparisons)
+p <- as.vector(dunn_result$P)
+padj <- as.vector(dunn_result$P.adjusted)
+
+df <- data.frame(comparisons, p, padj)
+df$sig <- ifelse(df$padj <= 0.05, "sig at 0.05", "non-sig")
+filtered_df <- subset(df, sig == "sig at 0.05")
+significant_comparisons_common_six <- as.vector(filtered_df$comparisons)
+cat("The significantly different pairings identified in Dunn's test are: \n")
+print(significant_comparisons_common_six)
+
+```
+# More detail to dataset
+Column commonscore added to the data set 
+```{r}
+nedallplus_no_outliers_3 <- nedallplus_no_outliers_2
+nedallplus_no_outliers_3$item <- rownames(nedallplus_no_outliers_3)
+
+# Convert rows 1 to 7 to NA
+# Move the 'item' column to the first position
+nedallplus_no_outliers_3$task <- NA
+
+z <- search_terms_all
+x <- as.vector(nedallplus_no_outliers_3$item)
+y <- c()
+```
+```{r}
+
+# Initialize an empty vector y
+y <- character(length(x))
+
+# Perform the search and populate vector y
+for (i in seq_along(x)) {
+  # Convert the element in x to lowercase for case-insensitive search
+  x_lower <- tolower(x[i])
+  
+  # Check each term in z against the element in x
+  for (term in z) {
+    term_lower <- tolower(term)
+    
+    # If a match is found, add the term to y and break out of the loop
+    if (grepl(term_lower, x_lower)) {
+      y[i] <- term
+      break
+    }
+  }
+}
+
+nedallplus_no_outliers_3$task <- y
+
+```
+```{r $commonscore x common and y tailored}
+x <- nedallplus_no_outliers_3
+x$item[1:7] <- ""
+x <- x[x$commontailored == 'common', ]
+x <- x[,-c(1, 4965, 4964)]
+x <- apply(x, 2, function(col) as.numeric(as.character(col)))
+y <- nedallplus_no_outliers_3
+y$item[1:7] <- ""
+y <- y[y$commontailored == 'tailored', ]
+y <- y[,-c(1, 4965, 4964)]
+y <- apply(y, 2, function(col) as.numeric(as.character(col)))
+
+```
+
+```{r, warning=FALSE} 
+x_col <- colSums(x, na.rm=TRUE)
+y_col <- colSums(y, na.rm=TRUE)
+z_col <- x_col + y_col
+
+hspot <- as.numeric(as.vector(nedallplus_no_outliers_3["HSPOT_MAX", ]))
+hspot <- hspot[-c(1, 4965, 4964)]
+hspot[hspot == 8] <- 7# necessary for addition as hs has 1 poitn counted already
+
+
+x_count <- colSums(!is.na(x))
+y_count <- colSums(!is.na(y)) +hspot
+z_count <- x_count + y_count
+
+x_perc <- x_col/x_count
+y_perc <- y_col/y_count
+z_perc <- z_col/z_count
+
+form <- unlist(as.vector(nedallplus_no_outliers_3["FORM", ]))
+form <- form[-c(1, 4965, 4964)]
+
+abc <- data.frame(form, x_perc, y_perc, z_perc)
+```
+
+```{r , warning=FALSE}
+abc_long <- abc %>%
+  gather(section, percentage, x_perc:z_perc)
+```
+These violin charts show the scores on common, tailored and all items across forms: 
+```{r}
+
+# Get unique values of 'form'
+unique_forms <- unique(abc_long$form)
+
+# Initialize a list to store the plots
+plot_list <- list()
+
+# Loop through each unique value of 'form' and create the violin plot with 'section' as facet
+for (form_val in unique_forms) {
+  # Check if the current 'form_val' is in 'form_items_unique'
+  if (form_val %in% form_items_unique) {
+    # Filter the data for the current 'form' value
+    data_subset <- abc_long[abc_long$form == form_val, ]
+    
+    # Calculate the mean for each section
+    mean_values <- data_subset %>%
+      group_by(section) %>%
+      summarize(mean_perc = mean(percentage))
+    
+    # Get the N count for the current 'form'
+    n_count <- nrow(data_subset)
+    
+    # Create the violin plot for this 'form' with 'section' as facet, and add mean dots and labels
+    p <- ggplot(data_subset, aes(x = section, y = percentage, fill = section)) +
+      geom_violin(alpha = 0.7) +
+      geom_point(data = mean_values, aes(x = section, y = mean_perc), color = "black", size = 3) +
+      geom_text(data = mean_values, aes(x = section, y = mean_perc, label = round(mean_perc, 2)),
+                vjust = -1, size = 3, color = "black", show.legend = TRUE) +
+      labs(title = paste("Common, Tailored and All\nForm:", form_val, "- N =", (n_count)/3),
+           x = "Section",
+           y = "Percentage Score") +
+      scale_fill_manual(values = c("Common" = "blue", "Tailored" = "green", "Total" = "red"),
+                        labels = c("Common", "Tailored", "Total")) +  # Labels for the legend
+      theme_minimal()
+    
+    # Add the plot to the list
+    plot_list[[as.character(form_val)]] <- p
+  }
+}
+
+# Print the plots
+for (i in seq_along(plot_list)) {
+  print(plot_list[[i]])
+}
+knitr::knit_exit()
+```
+# Equating
+
+```{r forms separated list fsl with 6 forms separated, warning=FALSE}
+# This code puts the 6 forms into a list with them separated.
+# NOTE: You'll need to run the code chunk below and then return here after checking for single response items, e.g. all 1s.
+fsl <- list()
+df <- as.data.frame(t(nedallplus_no_outliers_3))
+df<- df[-1,]
+df[, 8:ncol(df)] <- lapply(df[, 8:ncol(df)], as.numeric)
+
+for (form in form_items_unique) { 
+  # Subset rows where the value in the 'FORM' column matches 'hello'
+  form_data <- df[df$FORM == form, , drop = FALSE]
+  form_data <- replace(form_data, is.na(form_data), "")
+  form_data <- form_data[, -(1:7)]
+  # be careful with the following line if doing this with new data.
+  # unique_item_forms is drawn from a look into the data in a chunk below.
+  # in this chunk, I identified any items which had only 1s + the troublesome dictee04
+  # you'll want to run this chunk again without the below line if the data set changes. 
+  # and then build unique_item_names again based on what is found. 
+  form_data <- subset(form_data, select = !names(form_data) %in% unique_item_names)
+  form_data[form_data == ""] <- NA
+  blank_cols <- which(colSums(is.na(form_data)) == nrow(form_data))
+  form_data <- form_data[, -blank_cols]
+  rownames(form_data) <- seq_len(nrow(form_data))
+  form_matrix <- as.matrix(form_data)
+  fsl[[form]] <- form_matrix
+
+}
+```
+list dsl contains numeric matrices for each of the 6 common forms.
+
+Specifying the model:
+
+Since most of the items are dichotomous, the two-parameter logistic model (2PL) could be suitable. The 2PL model considers the difficulty and discrimination parameters for each item. For the polytomous item, let's use the graded response model (graded), which accounts for ordered categories. 
+
+```{r} 
+# Create an empty list to store the item names, matrix index, and single responses
+single_response_items <- list()
+
+for (i in 1:6) {
+  # Extract the matrix from fsl[[i]] into the 'dummy' variable
+  dummy <- fsl[[i]]
+  
+  # Identify the item names that have only one unique response across all students
+  single_response_item_names <- colnames(dummy)[apply(dummy, 2, function(x) length(unique(x)) == 1)]
+  
+  # Check if there are any single response items before creating the data frame
+  if (length(single_response_item_names) > 0) {
+    # Get the single responses for the identified items
+    single_responses <- as.vector(unique(dummy[, single_response_item_names]))
+    
+    # Record the item names, matrix index, and single responses in the single_response_items list
+    single_response_items[[i]] <- data.frame(
+      Matrix = rep(i, length(single_response_item_names)),
+      ItemNames = single_response_item_names,
+      SingleResponses = single_responses
+    )
+  }
+}
+single_response_items
+```
+The above code can be used to identify whether any items have only one response (e.g. everyone got it right). I used single_response_items to delete these in the code creating the matrices above. I then ran the above code again and confirm that these items have been removed. 
+
+Here we specify the model:
+```{r equate forma and formb}
+# Assuming 'fsl' is the list containing the six matrices
+
+# Create an empty list to store the models
+model_list <- list()
+
+for (i in 1:6) {
+  # Extract the matrix from fsl[[i]] into the 'dummy' variable
+  dummy <- fsl[[i]]
+  dummy_cols <- ncol(dummy)
+  dich_cols <- which(apply(dummy, 2, function(x) length(unique(x)) == 2))
+  poly_cols <- which(apply(dummy, 2, function(x) length(unique(x)) > 2))
+  # Create a vector 'item_types' with '2PL' for dichotomous items and 'graded' for polytomous items
+  item_types <- rep("2PL", ncol(dummy))
+  item_types[poly_cols] <- "graded"
+
+  # Set up the combined IRT model in one line
+  dummy_model <- mirt(dummy, 1, itemtype = item_types)
+  
+  # Assign the model to the corresponding index in the model_list
+  model_list[[i]] <- dummy_model
+}
+  
+
+
+
+```
+
+
+```{r}
+# Assuming 'model_list' contains the fitted models
+item_parameters <- coef(model_list[[1]])
+
+```
+
+```{r}
+
+m1x<- as.data.frame(estm1$coef)
+m2x <- as.data.frame(estm2$coef)
+```
+
+```{r histograms of d and a1}
+# Calculate mean and standard deviation for each variable
+mean_a1 <- mean(m1x$value.a1)
+mean_d <- mean(m1x$value.d)
+sd_a1 <- sd(m1x$value.a1)
+sd_d <- sd(m1x$value.d)
+
+# Create the overlapped histogram with mean lines and annotations
+ggplot(m1x, aes(x = value.a1, fill = "Value A1")) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+  geom_histogram(aes(x = value.d, fill = "Value D"), alpha = 0.5, position = "identity", bins = 30) +
+  labs(x = "Values", y = "Frequency", fill = "Variable",
+       title = "Distribution of IRT values for discrimination (d) and difficulty (a1)\nMANNED(B)") +
+  scale_fill_manual(values = c("blue", "red")) +
+  theme_minimal() +
+  # Add mean lines and annotations
+  geom_vline(xintercept = mean_a1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean_d, linetype = "dashed", color = "red") +
+  annotate("text", x = mean_a1, y = 40, label = paste("Mean (a1):", round(mean_a1, 2)), color = "blue", hjust = -0.5) +
+  annotate("text", x = mean_d, y = 25, label = paste("Mean (d):", round(mean_d, 2)), color = "red", hjust = -0.5) +
+  annotate("text", x = mean_a1, y = 35, label = paste("SD (a1):", round(sd_a1, 2)), color = "blue", hjust = -0.5) +
+  annotate("text", x = mean_d, y = 20, label = paste("SD (d):", round(sd_d, 2)), color = "red", hjust = -0.5)
+
+## for m2x
+
+
+mean_a1 <- mean(m2x$value.a1)
+mean_d <- mean(m2x$value.d)
+sd_a1 <- sd(m2x$value.a1)
+sd_d <- sd(m2x$value.d)
+
+# Create the overlapped histogram with mean lines and annotations
+ggplot(m2x, aes(x = value.a1, fill = "Value A1")) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+  geom_histogram(aes(x = value.d, fill = "Value D"), alpha = 0.5, position = "identity", bins = 30) +
+  labs(x = "Values", y = "Frequency", fill = "Variable",
+       title = "Distribution of IRT values for discrimination (d) and difficulty (a1)\nLETNED(B)") +
+  scale_fill_manual(values = c("blue", "red")) +
+  theme_minimal() +
+  # Add mean lines and annotations
+  geom_vline(xintercept = mean_a1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean_d, linetype = "dashed", color = "red") +
+  annotate("text", x = mean_a1, y = 40, label = paste("Mean (a1):", round(mean_a1, 2)), color = "blue", hjust = -0.5) +
+  annotate("text", x = mean_d, y = 25, label = paste("Mean (d):", round(mean_d, 2)), color = "red", hjust = -0.5) +
+  annotate("text", x = mean_a1, y = 35, label = paste("SD (a1):", round(sd_a1, 2)), color = "blue", hjust = -0.5) +
+  annotate("text", x = mean_d, y = 20, label = paste("SD (d):", round(sd_d, 2)), color = "red", hjust = -0.5)
+```
+
+
+```{r scatterplot d x a1 for both forms}
+ggplot() +
+  # Scatter plot for m1x
+  geom_point(data = m1x, aes(x = value.a1, y = value.d), color = "darkgreen", alpha = 0.7) +
+  # Scatter plot for m2x
+  geom_point(data = m2x, aes(x = value.a1, y = value.d), color = "purple", alpha = 0.7) +
+  # Add trend line for m1x
+  geom_smooth(data = m1x, aes(x = value.a1, y = value.d), method = "lm", color = "darkgreen", se = FALSE) +
+  # Add trend line for m2x
+  geom_smooth(data = m2x, aes(x = value.a1, y = value.d), method = "lm", color = "purple", se = FALSE) +
+  labs(x = "Value A1", y = "Value D", 
+       title = "Scatter Plot of value.d vs. value.a1 for m1x and m2x",
+       subtitle = "m1x in dark green, m2x in purple") +
+  theme_minimal()
+
+```
+
+what's that one weird dot in the upper left hand corner: Rn-Schr-Sp-Interpunctie_02a d=7.185220661, a1=-0.8764113
+Turns out this one has 100% correct response rate. 
+
+
+
+
+
+Create a list of coefficients and covariance matrices
+```{r}
+estc <- list(estm1$coef, estm2$coef)
+estv <- list(estm1$var, estm2$var)
+test <- paste("form", 1:2, sep = "")
+test
+```
+Create an object of class modIRT
+```{r}
+mod2pl <- modIRT(coef = estc, var = estv, names = test, display = FALSE)
+coef(mod2pl$form1)[1:5]
+
+```
+
+```{r} 
+lplan<-linkp(coef = estc)
+lplan
+```
+Weird chart that I don't understand yet.... 
+```{r} 
+
+library(sna)
+par(mar=c(0, 0, 0, 0))
+set.seed(6)
+gplot(lplan, displaylabels = TRUE,  vertex.sides = 4, vertex.cex = 5, vertex.rot =45,  usearrows = FALSE, label.pos = 5, label.cex = 1, vertex.col = 0)
+```
+Direct equating coefficients (between two forms with common items).
+
+Estimation of direct equating coefficients between Forms 1 and 2 using the Stocking-Lord method.
+
+NOTE: Item parameters are converted to the scale of Form 2.
+
+```{r}
+
+l12 <- direc(mods = mod2pl, which = c(1,2), method = "Stocking-Lord")
+l12
+summary(l12)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, echo=FALSE}
+# using mirt
+# requirement: combine the matrices in fsl into one bit matrix
+# first preserve col names
+matrix_colnames <- colnames(fsl[["FTRNED(A)"]])
+# Combine matrices using bind_rows
+data_matrix <- do.call(rbind, fsl)
+# change to numeric withotu flattenign to vector
+data_matrix<- apply(data_matrix, c(1, 2), as.numeric)
+colnames(data_matrix) <- matrix_colnames
+# ok the matrix seems set up ok now!
+blank_columns <- which(colSums(is.na(data_matrix) | data_matrix == 0, na.rm = TRUE) == nrow(data_matrix))
+
+# Subset the matrix to exclude the blank columns
+data_matrix <- data_matrix[, -blank_columns]
+data_matrix[is.na(data_matrix)] <- -1
+```
+
+```{r}
+na_count_subtracted <- 327 - rowSums(is.na(data_matrix))
+table(na_count_subtracted)
+# Convert the data_matrix to a vector
+data_vector <- as.vector(data_matrix)
+# Get all unique values in the data_vector
+unique_values <- unique(data_vector)
+unique_values
+data_vector <- as.vector(data_matrix[,1:322])
+unique_values <- unique(data_vector)
+unique_values
+```
+### mirt equating
+With this modification, the "mirt" package will fit a mixed-format IRT model, using the two-parameter logistic (2PL) model for the dichotomous items and the graded response model (GRM) for the partial credit items. The item formats are specified in the item_format vector, where each item's model is defined accordingly.
+For items where higher scores represent higher levels of the trait being measured (e.g., better students scoring higher), the GRM is particularly well-suited because it can estimate thresholds that reflect the transitions from one response category to another as the ability level increases. This allows for a more nuanced and accurate representation of how respondents' abilities relate to their item responses.
+```{r mirt equating}
+# Specify the item format for each item
+# The first 530 items are dichotomous (2 categories)
+# The last 7 items (rows 531 to 537) are partial credit items with 9 categories (0 to 8 points)
+item_format <- c(rep('2PL', 322), rep('graded', 5))
+
+
+# Create the mixed-format IRT model object
+model <- mirt(data_matrix, model = item_format)
+
+
+```
+
+```{r}
+# Get item parameters
+item_parameters <- coef(model)
+
+
+```
+
+
+
+
+
