@@ -1,0 +1,668 @@
+  * 1 Functionalities
+
+  * 2 Data preparation
+
+  * 3 Direct equating coefficients
+
+  * 4 Chain equating coefficients
+
+  * 5 Average equating coefficients
+
+  * 6 Equated scores
+
+  * 7 Test for DIF
+
+  * 8 Tests for drifts
+
+
+  The R Package equateIRT: A Tutorial
+
+
+  1 Functionalities
+
+The equateIRT package computes:
+
+  * *Direct equating coefficients* (between two forms with common items).
+  * *Chain equating coefficients* (through a chain of forms with common
+    items in pairs).
+  * *Average (bisector) equating coefficients* (between two forms
+    connected through more than one path).
+  * *Equated scores* with *true score equating* and *observed score
+    equating* methods.
+  * *Standard errors* of all equating coefficients and equated scores.
+  * *Test for DIF* and *tests for drifts*.
+
+
+  2 Data preparation
+
+Load the package equateIRT and the data
+
+```{r}
+library("equateIRT")
+data("data2pl", package = "equateIRT")
+```
+Estimate a two parameter logistic model for 5 data sets with the R
+package mirt. 
+
+```{r}
+library("mirt")
+m1 <- mirt(data2pl[[1]], SE = TRUE)
+m2 <- mirt(data2pl[[2]], SE = TRUE)
+m3 <- mirt(data2pl[[3]], SE = TRUE)
+m4 <- mirt(data2pl[[4]], SE = TRUE)
+m5 <- mirt(data2pl[[5]], SE = TRUE)
+```
+
+Extract the item parameter estimates and the covariance matrices. 
+- value.d = discrimination
+- value.a1 = 
+```{r}
+estm1 <- import.mirt(m1, display = TRUE)
+estm2 <- import.mirt(m2, display = FALSE)
+estm3 <- import.mirt(m3, display = FALSE)
+estm4 <- import.mirt(m4, display = FALSE)
+estm5 <- import.mirt(m5, display = FALSE)
+estm1$coef[, ]
+```
+|##        value.d value.a1
+## I1 -0.06265505 1.076092
+## I2 -0.03147833 1.123453
+## I3 -0.07992642 1.091380|
+
+| <#cb5-1>estm1$var[1:3, 1:3]|
+
+|##              [,1]         [,2]         [,3]
+## [1,] 0.0012271350 0.0002449221 0.0002378241
+## [2,] 0.0002449221 0.0012622821 0.0002484510
+## [3,] 0.0002378241 0.0002484510 0.0012394799|
+
+Create a list of coefficients and covariance matrices
+
+| <#cb7-1>estc <- list(estm1$coef, estm2$coef, estm3$coef, estm4$coef, estm5$coef)
+ <#cb7-2>estv <- list(estm1$var, estm2$var, estm3$var, estm4$var, estm5$var)
+ <#cb7-3>test <- paste("test", 1:5, sep = "")|
+
+Create an object of class |modIRT|
+
+| <#cb8-1>mod2pl <- modIRT(coef = estc, var = estv, names = test, display = FALSE)
+ <#cb8-2>coef(mod2pl$test1)[1:5]|
+
+|##    Dffclt.I1    Dffclt.I2    Dffclt.I3    Dffclt.I4    Dffclt.I5 
+##  0.058224616  0.028019255  0.073234265  0.415936521 -0.006686047|
+
+The linkage plan
+
+| <#cb10-1>lplan<-linkp(coef = estc)
+ <#cb10-2>lplan|
+
+|##      [,1] [,2] [,3] [,4] [,5]
+## [1,]   20   10    0    0   10
+## [2,]   10   20   10    0    0
+## [3,]    0   10   20   10    0
+## [4,]    0    0   10   20   10
+## [5,]   10    0    0   10   20|
+
+A graphic of the linkage plan with package |sna|
+
+| <#cb12-1>library(sna)
+ <#cb12-2>par(mar=c(0, 0, 0, 0))
+ <#cb12-3>set.seed(6)
+ <#cb12-4>gplot(lplan, displaylabels = TRUE,  vertex.sides = 4, vertex.cex = 5, vertex.rot =45,  usearrows = FALSE, label.pos = 5, label.cex = 1, vertex.col = 0)|
+
+Linkage plan
+
+Linkage plan
+
+
+  3 Direct equating coefficients
+
+Estimation of direct equating coefficients between Forms 1 and 2 using
+the mean-mean method.
+
+*NOTE: Item parameters are converted to the scale of Form 2.*
+
+| <#cb13-1>l12 <- direc(mods = mod2pl, which = c(1,2), method = "mean-mean")
+ <#cb13-2>l12|
+
+|## Direct equating coefficients 
+## Method: mean-mean 
+## Link: test1.test2|
+
+| <#cb15-1>summary(l12)|
+
+|## Link: test1.test2 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.21061 0.028998
+## B -0.14242 0.028106|
+
+Estimation of all direct equating coefficients between forms with common
+items using the mean-mean method
+
+| <#cb17-1>direclist2pl <- alldirec(mods = mod2pl, method = "mean-mean")
+ <#cb17-2>direclist2pl|
+
+|## Direct equating coefficients 
+## Method: mean-mean 
+## Links: 
+## test1.test2 
+## test1.test5 
+## test2.test1 
+## test2.test3 
+## test3.test2 
+## test3.test4 
+## test4.test3 
+## test4.test5 
+## test5.test1 
+## test5.test4|
+
+Direct equating coefficients for Forms 1 and 2
+
+| <#cb19-1>summary(direclist2pl, link="test1.test2")|
+
+|## Link: test1.test2 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.21061 0.028998
+## B -0.14242 0.028106|
+
+
+  4 Chain equating coefficients
+
+Estimation of all chain equating coefficients of length 4
+
+| <#cb21-1>cec4 <- chainec(r = 4, direclist = direclist2pl)
+ <#cb21-2>cec4|
+
+|## Chain equating coefficients 
+## Method: mean-mean 
+## Paths: 
+## test4.test5.test1.test2 
+## test3.test2.test1.test5 
+## test5.test1.test2.test3 
+## test4.test3.test2.test1 
+## test5.test4.test3.test2 
+## test1.test2.test3.test4 
+## test1.test5.test4.test3 
+## test2.test3.test4.test5 
+## test2.test1.test5.test4 
+## test3.test4.test5.test1|
+
+| <#cb23-1>summary(cec4, path="test1.test2.test3.test4")|
+
+|## Path: test1.test2.test3.test4 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.25371 0.046538
+## B -0.49825 0.038497|
+
+Chain equating coefficients for path {1, 2, 3, 4}
+
+| <#cb25-1>summary(cec4, path="test1.test2.test3.test4")|
+
+|## Path: test1.test2.test3.test4 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.25371 0.046538
+## B -0.49825 0.038497|
+
+Estimation of all chain equating coefficients of length 4 from Form 1 to
+Form 4
+
+| <#cb27-1>cec14 <- chainec(r = 4, direclist = direclist2pl, f1 = "test1", f2 = "test4")
+ <#cb27-2>cec14|
+
+|## Chain equating coefficients 
+## Method: mean-mean 
+## Paths: 
+## test1.test2.test3.test4|
+
+| <#cb29-1>summary(cec14)|
+
+|## Path: test1.test2.test3.test4 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.25371 0.046538
+## B -0.49825 0.038497|
+
+Estimation of chain equating coefficient for path {1, 5, 4}
+
+| <#cb31-1>pth <- paste("test", c(1,5,4), sep = "")
+ <#cb31-2>chainec154 <- chainec(direclist = direclist2pl, pths = pth)
+ <#cb31-3>summary(chainec154)|
+
+|## Path: test1.test5.test4 
+## Method: mean-mean 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.15964 0.033424
+## B -0.40028 0.033072|
+
+*NOTE: Item parameters are converted to the scale of Form 4.*
+
+
+  5 Average equating coefficients
+
+Estimation of bisector equating coefficients
+
+| <#cb33-1>ecall <- c(cec14, chainec154)
+ <#cb33-2>fec <- bisectorec(ecall = ecall, weighted = TRUE, unweighted = TRUE)
+ <#cb33-3>fec|
+
+|## Bisector and weighted bisector equating coefficients 
+## Method: mean-mean 
+## 
+## Link: test1.test4 
+##   Paths: 
+##   test1.test2.test3.test4 
+##   test1.test5.test4|
+
+| <#cb35-1>summary(fec)|
+
+|## Link: test1.test4 
+## Method: mean-mean 
+## Equating coefficients:
+##                       Path Estimate   StdErr
+##  A test1.test2.test3.test4  1.25371 0.046538
+##  A       test1.test5.test4  1.15964 0.033424
+##  A                bisector  1.20559 0.030635
+##  A       weighted bisector  1.18974 0.029330
+##  B test1.test2.test3.test4 -0.49825 0.038497
+##  B       test1.test5.test4 -0.40028 0.033072
+##  B                bisector -0.44814 0.029917
+##  B       weighted bisector -0.43163 0.029704|
+
+Extract the equating coefficients
+
+| <#cb37-1> eqc(fec)|
+
+|##          link                    path        A          B
+## 1 test1.test4 test1.test2.test3.test4 1.253712 -0.4982537
+## 2 test1.test4       test1.test5.test4 1.159638 -0.4002830
+## 3 test1.test4                bisector 1.205588 -0.4481367
+## 4 test1.test4       weighted bisector 1.189738 -0.4316305|
+
+Extract item parameters of two forms being equated in the original scale
+and item parameters of the first form converted to the scale of the
+second form.
+
+| <#cb39-1>itm(fec, bistype = "weighted")|
+
+|##          Item        test1       test4 test1.as.test4
+## 1   Dffclt.I1  0.058224616          NA    -0.36235841
+## 2  Dffclt.I10  0.654862838          NA     0.34748486
+## 3   Dffclt.I2  0.028019255          NA    -0.39829488
+## 4  Dffclt.I21           NA -0.18966258             NA
+## 5  Dffclt.I22           NA -0.57151991             NA
+## 6  Dffclt.I23           NA -0.97068963             NA
+## 7  Dffclt.I24           NA  0.28221916             NA
+## 8  Dffclt.I25           NA  0.02656655             NA
+## 9  Dffclt.I26           NA -0.12088864             NA
+## 10 Dffclt.I27           NA  0.47589388             NA
+## 11 Dffclt.I28           NA -0.01063699             NA
+## 12 Dffclt.I29           NA -0.93598686             NA
+## 13  Dffclt.I3  0.073234265          NA    -0.34450086
+## 14 Dffclt.I30           NA  0.54314189             NA
+## 15 Dffclt.I31  0.522747833          NA     0.19030260
+## 16 Dffclt.I32  0.831399476          NA     0.55751724
+## 17 Dffclt.I33  0.575285842          NA     0.25280907
+## 18 Dffclt.I34 -0.342019714          NA    -0.83854437
+## 19 Dffclt.I35  0.428922604          NA     0.07867514
+## 20 Dffclt.I36  0.852091712          NA     0.58213558
+## 21 Dffclt.I37  0.456475784          NA     0.11145621
+## 22 Dffclt.I38 -0.137534728          NA    -0.59526078
+## 23 Dffclt.I39  0.519128781          NA     0.18599687
+## 24  Dffclt.I4  0.415936521          NA     0.06322510
+## 25 Dffclt.I40  0.841940468          NA     0.57005826
+## 26 Dffclt.I41           NA -1.12849656             NA
+## 27 Dffclt.I42           NA -0.77000076             NA
+## 28 Dffclt.I43           NA  1.08701579             NA
+## 29 Dffclt.I44           NA  0.88830215             NA
+## 30 Dffclt.I45           NA  0.22917144             NA
+## 31 Dffclt.I46           NA -0.78046634             NA
+## 32 Dffclt.I47           NA  0.13591938             NA
+## 33 Dffclt.I48           NA -0.21787300             NA
+## 34 Dffclt.I49           NA -0.05849482             NA
+## 35  Dffclt.I5 -0.006686047          NA    -0.43958511
+## 36 Dffclt.I50           NA -0.06296350             NA
+## 37  Dffclt.I6 -0.773019644          NA    -1.35132145
+## 38  Dffclt.I7  0.155039212          NA    -0.24717439
+## 39  Dffclt.I8  0.337353040          NA    -0.03026867
+## 40  Dffclt.I9 -0.182437547          NA    -0.64868338
+## 41  Dscrmn.I1  1.076092086          NA     0.90447806
+## 42 Dscrmn.I10  1.341200299          NA     1.12730710
+## 43  Dscrmn.I2  1.123453456          NA     0.94428629
+## 44 Dscrmn.I21           NA  0.96336363             NA
+## 45 Dscrmn.I22           NA  1.01240417             NA
+## 46 Dscrmn.I23           NA  1.05633835             NA
+## 47 Dscrmn.I24           NA  0.87356846             NA
+## 48 Dscrmn.I25           NA  1.06908275             NA
+## 49 Dscrmn.I26           NA  1.10250771             NA
+## 50 Dscrmn.I27           NA  1.04526491             NA
+## 51 Dscrmn.I28           NA  0.93408343             NA
+## 52 Dscrmn.I29           NA  0.93004199             NA
+## 53  Dscrmn.I3  1.091380106          NA     0.91732796
+## 54 Dscrmn.I30           NA  1.11220053             NA
+## 55 Dscrmn.I31  1.483887762          NA     1.24723892
+## 56 Dscrmn.I32  1.300806488          NA     1.09335525
+## 57 Dscrmn.I33  1.353845457          NA     1.13793562
+## 58 Dscrmn.I34  1.381906844          NA     1.16152181
+## 59 Dscrmn.I35  1.272436496          NA     1.06950967
+## 60 Dscrmn.I36  1.008690352          NA     0.84782549
+## 61 Dscrmn.I37  1.288728736          NA     1.08320364
+## 62 Dscrmn.I38  1.473055586          NA     1.23813424
+## 63 Dscrmn.I39  1.342341968          NA     1.12826670
+## 64  Dscrmn.I4  1.281925510          NA     1.07748539
+## 65 Dscrmn.I40  1.457139147          NA     1.22475614
+## 66 Dscrmn.I41           NA  1.03344365             NA
+## 67 Dscrmn.I42           NA  0.96422272             NA
+## 68 Dscrmn.I43           NA  0.99182420             NA
+## 69 Dscrmn.I44           NA  0.95219518             NA
+## 70 Dscrmn.I45           NA  1.13447404             NA
+## 71 Dscrmn.I46           NA  1.18533478             NA
+## 72 Dscrmn.I47           NA  1.04662444             NA
+## 73 Dscrmn.I48           NA  0.94374714             NA
+## 74 Dscrmn.I49           NA  0.80777460             NA
+## 75  Dscrmn.I5  1.007880221          NA     0.84714455
+## 76 Dscrmn.I50           NA  1.05217297             NA
+## 77  Dscrmn.I6  0.949042894          NA     0.79769054
+## 78  Dscrmn.I7  1.057666073          NA     0.88899061
+## 79  Dscrmn.I8  1.201282017          NA     1.00970284
+## 80  Dscrmn.I9  0.976907845          NA     0.82111162|
+
+
+  6 Equated scores
+
+Equated scores with the true score equating method
+
+| <#cb41-1>score(fec, bistype = "weighted")|
+
+|## The following scores are not attainable: 0|
+
+|##         theta test4 test1.as.test4       StdErr
+## 1  -3.2018628     1       1.015953 5.003132e-02
+## 2  -2.4342926     2       1.955948 6.878631e-02
+## 3  -1.9548627     3       2.893737 7.874430e-02
+## 4  -1.5906884     4       3.841937 8.359716e-02
+## 5  -1.2874493     5       4.805130 8.512002e-02
+## 6  -1.0206725     6       5.784930 8.446458e-02
+## 7  -0.7769609     7       6.781477 8.251528e-02
+## 8  -0.5479067     8       7.794013 8.003024e-02
+## 9  -0.3275850     9       8.821124 7.769419e-02
+## 10 -0.1113201    10       9.860811 7.609765e-02
+## 11  0.1050414    11      10.910495 7.564081e-02
+## 12  0.3256710    12      11.966967 7.639765e-02
+## 13  0.5553007    13      13.026319 7.802189e-02
+## 14  0.7999529    14      14.083854 7.975624e-02
+## 15  1.0681829    15      15.133999 8.052101e-02
+## 16  1.3736059    16      16.170197 7.900210e-02
+## 17  1.7410355    17      17.184780 7.366228e-02
+## 18  2.2254147    18      18.168749 6.256879e-02
+## 19  3.0012603    19      19.111255 4.258250e-02
+## 20 42.1302143    20      20.000000 4.009435e-15|
+
+Equated scores with the observed score equating method
+
+| <#cb44-1>score(fec, method = "OSE", bistype = "weighted")|
+
+|##    test4 test1.as.test4     StdErr
+## 1      0    -0.01421594 0.03617689
+## 2      1     0.95379681 0.05480849
+## 3      2     1.90979310 0.06631698
+## 4      3     2.86661488 0.07347523
+## 5      4     3.83082127 0.07759881
+## 6      5     4.80579296 0.07950051
+## 7      6     5.79315712 0.07984123
+## 8      7     6.79342490 0.07915320
+## 9      8     7.80635915 0.07786227
+## 10     9     8.83092394 0.07643819
+## 11    10     9.86541737 0.07532277
+## 12    11    10.90798519 0.07475095
+## 13    12    11.95636186 0.07472299
+## 14    13    13.00728219 0.07500067
+## 15    14    14.05690943 0.07510454
+## 16    15    15.10136220 0.07434567
+## 17    16    16.13633708 0.07187445
+## 18    17    17.15705121 0.06680167
+## 19    18    18.15894672 0.05832150
+## 20    19    19.13833584 0.04577955
+## 21    20    20.09342215 0.02877984|
+
+A comparison of equated scores obtained with 2 different chains,
+bisector and weighted bisector methods.
+
+| <#cb46-1>score(chainec154, scores = 17)|
+
+|##      theta test4 test1.as.test4     StdErr
+## 1 1.741036    17        17.2431 0.09998233|
+
+| <#cb48-1>score(cec4, path = "test1.test2.test3.test4", scores = 17)|
+
+|##      theta test4 test1.as.test4    StdErr
+## 1 1.741036    17       17.06712 0.1618202|
+
+| <#cb50-1>score(fec, bistype = "unweighted", scores = 17)|
+
+|##      theta test4 test1.as.test4     StdErr
+## 1 1.741036    17       17.15485 0.08281067|
+
+| <#cb52-1>score(fec, bistype = "weighted", scores = 17)|
+
+|##      theta test4 test1.as.test4     StdErr
+## 1 1.741036    17       17.18478 0.07366228|
+
+
+  7 Test for DIF
+
+Load the data
+
+| <#cb54-1>data(dataDIF)|
+
+Create a dataset for each group and estimate a 2PL model for each group
+using the R package mirt
+
+| <#cb55-1>library(mirt)
+ <#cb55-2>data1 <- dataDIF[dataDIF$group == 1, 1:20]
+ <#cb55-3>data2 <- dataDIF[dataDIF$group == 2, 1:20]
+ <#cb55-4>data3 <- dataDIF[dataDIF$group == 3, 1:20]
+ <#cb55-5>mod1 <- mirt(data1, SE = TRUE)
+ <#cb55-6>mod2 <- mirt(data2, SE = TRUE)
+ <#cb55-7>mod3 <- mirt(data3, SE = TRUE)|
+
+Extract the coefficients and the covariance matrix
+
+| <#cb56-1>est1 <- import.mirt(mod1, display = FALSE)
+ <#cb56-2>est2 <- import.mirt(mod2, display = FALSE)
+ <#cb56-3>est3 <- import.mirt(mod3, display = FALSE)|
+
+Perform the test for DIF on two groups
+
+| <#cb57-1>res_diftest2 <- dif.test(coef = list(est1$coef, est2$coef), var = list(est1$var, est2$var))
+ <#cb57-2>res_diftest2|
+
+|## 
+##      Test for Differential Item Functioning
+## 
+## Item parameters tested for DIF: intercept and slope
+## Equating method used: mean-mean 
+## Reference group: T1    Focal group: T2 
+## Item purification not applied
+## 
+##     statistic  p.value      
+## I01    38.605 4.14e-09 ***  
+## I02     1.954    0.376      
+## I03     3.888    0.143      
+## I04     0.025    0.988      
+## I05     1.753    0.416      
+## I06     1.291    0.524      
+## I07     3.433    0.180      
+## I08     0.181    0.914      
+## I09     0.686    0.710      
+## I10     0.517    0.772      
+## I11     3.237    0.198      
+## I12     0.891    0.640      
+## I13     0.464    0.793      
+## I14     1.296    0.523      
+## I15     1.591    0.451      
+## I16     0.962    0.618      
+## I17     2.856    0.240      
+## I18     0.159    0.924      
+## I19     0.627    0.731      
+## I20     1.861    0.394      
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1|
+
+Perform the test for DIF on three groups
+
+| <#cb59-1>res_diftest3 <- dif.test(coef = list(est1$coef, est2$coef, est3$coef), 
+ <#cb59-2>                         var = list(est1$var, est2$var, est3$var))
+ <#cb59-3>res_diftest3|
+
+|## 
+##      Test for Differential Item Functioning
+## 
+## Item parameters tested for DIF: intercept and slope
+## Equating method used: mean-mean 
+## Reference group: T1    Focal groups: T2, T3,  
+## Item purification not applied
+## 
+##     statistic p.value      
+## I01   164.585  <2e-16 ***  
+## I02     3.331   0.504      
+## I03     4.862   0.302      
+## I04     5.300   0.258      
+## I05     3.368   0.498      
+## I06     1.323   0.858      
+## I07     4.605   0.330      
+## I08     1.556   0.817      
+## I09     1.449   0.836      
+## I10     4.122   0.390      
+## I11     3.874   0.423      
+## I12     5.300   0.258      
+## I13     2.859   0.582      
+## I14     2.770   0.597      
+## I15     3.640   0.457      
+## I16     4.158   0.385      
+## I17     5.924   0.205      
+## I18     2.080   0.721      
+## I19     2.123   0.713      
+## I20     7.399   0.116      
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1|
+
+It is possible to change the reference group, the equating method used,
+and to apply purification.
+
+| <#cb61-1>res_diftest3 <- dif.test(coef = list(est1$coef, est2$coef, est3$coef), 
+ <#cb61-2>                         var = list(est1$var, est2$var, est3$var), 
+ <#cb61-3>                         reference = 2, method = "Haebara", purification = TRUE)
+ <#cb61-4>res_diftest3|
+
+|## 
+##      Test for Differential Item Functioning
+## 
+## Item parameters tested for DIF: intercept and slope
+## Equating method used: Haebara 
+## Reference group: T2    Focal groups: T1, T3,  
+## Item purification applied. Significance level = 0.05 
+## 
+##     statistic p.value      
+## I01   168.026  <2e-16 ***  
+## I02     2.553   0.635      
+## I03     2.921   0.571      
+## I04     4.263   0.372      
+## I05     3.395   0.494      
+## I06     0.648   0.958      
+## I07     2.796   0.592      
+## I08     2.796   0.593      
+## I09     1.668   0.796      
+## I10     2.405   0.662      
+## I11     1.972   0.741      
+## I12     4.116   0.391      
+## I13     1.721   0.787      
+## I14     2.381   0.666      
+## I15     4.668   0.323      
+## I16     2.148   0.709      
+## I17     4.457   0.348      
+## I18     1.301   0.861      
+## I19     2.900   0.575      
+## I20     3.497   0.478      
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1|
+
+
+  8 Tests for drifts
+
+The identity test performs a statistical test to verify if the chain
+equating coeffients from one form to itself are A=1 and B=0.
+
+| <#cb63-1>data(est3pl)
+ <#cb63-2>test <- paste("test", 1:5, sep = "")
+ <#cb63-3>mod3pl <- modIRT(coef = est3pl$coef, var = est3pl$var, names = test, display = FALSE)
+ <#cb63-4>direclist3pl <- alldirec(mods = mod3pl, method = "Haebara")
+ <#cb63-5>pth3 <- paste("test", c(1:5,1), sep = "")
+ <#cb63-6>chainec_circle <- chainec(direclist = direclist3pl, pths = pth3)
+ <#cb63-7>summary(chainec_circle)|
+
+|## Path: test1.test2.test3.test4.test5.test1 
+## Method: Haebara 
+## Equating coefficients:
+##    Estimate   StdErr
+## A 1.0868759 0.063585
+## B 0.0022126 0.041833|
+
+| <#cb65-1>id.test(chainec_circle)|
+
+|## 
+##         Identity test 
+## 
+## path:  test1.test2.test3.test4.test5.test1 
+## statistic = 2.349279, df = 2, p-value = 0.3089304|
+
+The null hypothesis A=1 and B=0 is not rejected.
+
+It is also possible to performs a statistical test to verify if the
+chain equating coeffients that link the same two forms are equal.
+
+In the following example test 1 and 5 are linked through two different
+paths giving two different pairs of equating coefficients. The example
+uses the 3PL models and the Haebara method, though other options are
+possible.
+
+| <#cb67-1>pth3 <- paste("test", 1:5, sep = "")
+ <#cb67-2>chainec3 <- chainec(direclist = direclist3pl, pths = pth3)
+ <#cb67-3>ecall <- c(chainec3, direclist3pl["test1.test5"])
+ <#cb67-4>summary(chainec3)|
+
+|## Path: test1.test2.test3.test4.test5 
+## Method: Haebara 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.06595 0.056590
+## B -0.50368 0.042982|
+
+| <#cb69-1>summary(direclist3pl$test1.test5)|
+
+|## Link: test1.test5 
+## Method: Haebara 
+## Equating coefficients:
+##   Estimate   StdErr
+## A  1.00935 0.029052
+## B -0.51886 0.027863|
+
+| <#cb71-1>sd.test(ecall)|
+
+|## 
+##         Scale drift test 
+## 
+## link:  test1.test5 
+## statistic = 1.623208, df = 2, p-value = 0.4441452|
+
+The null hypothesis of equality of the equating coefficients is not
+rejected.
+

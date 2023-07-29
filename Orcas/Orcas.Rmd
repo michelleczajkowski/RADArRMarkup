@@ -1,0 +1,45 @@
+---
+title: "Orcas Test"
+output: html_document
+date: "2023-07-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tidyr)
+```
+
+#checkcheck(df) 
+Pulls up a (temporary) excel file so you can inspect the data in data frame df.
+```{r checkcheck(df), eval=FALSE, echo=FALSE}
+checkcheck <- function(df) {
+  # Write the data frame to a CSV file
+  write.csv(df, file = "checkcheck.csv")
+  shell.exec("checkcheck.csv")
+}
+
+``` 
+
+# Orcas Test
+## Importing data 
+I have converted the xml data for Orcas_0 into a xlsx file Orca_0.xlsx in this file directory. Now I want to import the second sheet 'Sheet2' which has the information in long format. 
+```{r import data, echo=FALSE}
+Orcas_0 <- read_excel("Orcas_0.xlsx", sheet = "Sheet2")
+```
+The file is imported as Orcas_0, a data frame. Let's format it. 
+```{r format data, echo=FALSE}
+Orcas_0_Intervals <- subset(Orcas_0, name6 == "Summary per Interval")
+Orcas_0_Intervals_wide <- pivot_wider(data = Orcas_0_Intervals,
+                                      names_from = name7,
+                                      values_from = value9)
+row.names(Orcas_0_Intervals_wide) <- Orcas_0_Intervals_wide$name8
+
+# Remove the 'name8' column as it's now redundant
+Orcas_0_Intervals_wide$name8 <- NULL
+Orcas_0_Intervals_wide$name6 <- NULL 
+```
+
+
+
+

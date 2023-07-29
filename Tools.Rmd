@@ -1,0 +1,39 @@
+---
+title: "Tools Data"
+output: html_document
+date: "2023-07-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## import data - data
+The data comes from NEDALL.Rmd which produces nedallplus_no_outliers_3. This data sheet contains information about task, item, and common/tailored status along with summary stats for each test taker: admin, form, score, etc. 
+
+```{r retrieve data from csv}
+data <- read.csv("2022307_nedallplus_no_outliers_3.csv", row.names=1,header = TRUE)
+```
+Grab rows for items includes kiesvorm
+```{r}
+# Assuming 'data' is the name of your data frame
+# and 'item' is the column name containing the strings
+
+# Use grep with ignore.case = TRUE to get the row indices
+rows_with_kiesvorm_indices <- grep("kiesvorm", data$item, ignore.case = TRUE)
+
+# Get the row names of the rows_with_kiesvorm data frame
+row_names <- rownames(rows_with_kiesvorm)
+
+# Convert the row names to numeric (if needed)
+kiesvorm <- as.numeric(row_names)
+
+# Now 'rows_with_kiesvorm_indices' contains the row numbers where 'item' contains 'kiesvorm' (regardless of case)
+
+```
+view results /form
+```{r}
+x <- colSums(kiesvorm)
+kiesvorm <- rbind()
+```
+
