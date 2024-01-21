@@ -19,7 +19,7 @@ checkcheck <- function(df) {
   shell.exec("checkcheck.csv")
 }
 ``` 
-# Purpose
+## Purpose of this script
 This script can be used to create a master data frame for all radar administrations of you choice. Most likely, it will be used to pull together all existing administration exports from Cirrus into one master sheet, either NED or ENG. Both are possible. 
 
 The data will be raw data, which means that special care must be taken to address some of the issues that have arisen earlier - i.e., some characters cause problems, some answers have spaces after them, etc. 
@@ -28,12 +28,12 @@ The raw data will also be set up to include section scores, which means the scor
 
 Caution: There will also be questions for which the answer contains several parts separated by ;. This requires some manual input. For the purposes of R Markdown, All code is set to eval=FALSE. 
 
-## Setup
+## Setup the data and folders before starting
 In one folder, put all files from Cirrus with the name corresponding their administration e.g. LETNED22232e (that is, LET - letteren, NED - nederlands, 2223 - academic year 22-23, 2e - tweede gelegenheid). This name is important as it will be used later to construct test taker IDs. These test taker IDs may be used later to cross reference the responses from individual test takers in the original data later on. 
 
 All files should be csv. 
 
-## Specify Path, Grab Files
+## Specify Path, Grab Files - and Check!
 folder_path: where the Cirrus exports are: **Change as needed**.<br>
 file_names: a vector of all files in folder_path<br>
 radarlist: a list containing [[i]] dfs for i files in file_names<br>
@@ -149,8 +149,8 @@ for (i in 2:length(modified_radarlist)) {
 colnames(master_all) <- gsub("\\.", "-", colnames(master_all))
 
 ```
-# Semicolon-separated data 
-## Find cols with ; ...
+## Semicolon-separated data 
+### 1) Find cols with ; ...
 ... which indicate that one particular question has multiple answers separated by semi-colons. These can be tricky to separate in some cases, so let's start by identifying them. Run the code below and inspect the output. The table lists the items with semicolons somewhere in the recorded responses, and next to that the first non-NA response by test takers. Inspecting this list will let you know whether the item in question really is semicolon-divied or is there just a semicolon somewhere in one option. 
 ```{r}
 semicolon_cols <- c()
@@ -174,7 +174,7 @@ semicolon_results
 
 ``` 
 
-### Inspect semicolon_answers ...
+### 2) Inspect semicolon_answers ...
 ... the program asks for input at this stage - y or n whether the answer is a true semi-colon separated answer or not. 
 
 

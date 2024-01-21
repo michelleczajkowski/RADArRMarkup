@@ -1,0 +1,184 @@
+---
+title: "ENG 20231e Analysis"
+output: html_document
+date: "2023-07-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+# RADAr English 2022-23 1 gelegenheid
+This file uses data imported and processed in the file Radar_Data_Import.Rmd
+```{r checkcheck(df), include=FALSE}
+checkcheck <- function(df) {
+  # Write the data frame to a CSV file
+  write.csv(df, file = "checkcheck.csv")
+  shell.exec("checkcheck.csv")
+}
+``` 
+## Import data
+
+The file 202307_X_ENG22231e RAW RESPONSES.csv was generated earlier using the procedure contained in Radar_Data_Import.Rmd.
+
+This data includes the raw answers for all items for the administrations (FTR, LET, MAN, NWI, SOW) from Oct 2023. 
+
+Additionally, the data contains the scores per section for each test taker. Due to the difficulty of transforming the constructed response items to coded 0/1 scores, these summary per-section scores will be used as the basis for this analysis. 
+
+```{r retrieve data from csv}
+data <- read.csv("202307_X_ENG22231e RAW RESPONSES.csv", row.names=1,header = TRUE)
+```
+
+We can start by trimming the data to include only those summary items. These are found in the last 15 columns of the dataset. We will also keep the row $TESTTAKER to extract form.
+
+```{r}
+testtaker <- c(data$TESTTAKER)
+data2 <- data[,344:358]
+data3 <- cbind(testtaker, data2)
+```
+
+data3 now contains testtaker + all section scores. Now, a column for facutly is added using the first six characters of the testtaker value
+```{r}
+data3$faculty <- substr(data3$testtaker, 1, 3)
+```
+
+## Summary Data
+### N for each faculty
+
+```{r}
+table(data3$faculty)
+```
+
+### Total Score for each faculty
+Add the total score row $score
+```{r}
+data3$score <- rowSums(data3[,2:16 ], na.rm = TRUE)
+hist(data3$score)
+```
+Summarize scores for all test takers:
+```{r}
+score_count <- nrow(data3)
+score_min <- round(min(data3$score, na.rm = TRUE), 2)
+score_max <- round(max(data3$score, na.rm = TRUE), 2)
+score_median <- round(median(data3$score, na.rm = TRUE), 2)
+score_mean <- round(mean(data3$score, na.rm = TRUE), 2)
+score_mean_sd <- round(sd(data3$score, na.rm = TRUE) / sqrt(nrow(data3)), 2)
+
+cat("Count:", score_count, "\n")
+cat("Min:", score_min, "\n")
+cat("Max:", score_max, "\n")
+cat("Median:", score_median, "\n")
+cat("Mean:", score_mean, "\n")
+cat("MeanSD:", score_mean_sd, "\n")
+```
+Summarize by Faculty:
+```{r} 
+summary_table <- data3 %>%
+  group_by(faculty) %>%
+  summarise(
+    count = n(),
+    min = round(min(score, na.rm = TRUE), 2),
+    max = round(max(score, na.rm = TRUE), 2),
+    median = round(median(score, na.rm = TRUE), 2),
+    mean = round(mean(score, na.rm = TRUE), 2),
+    mean_sd = round(sd(score, na.rm = TRUE) / sqrt(n()), 2)
+  )
+print(summary_table)
+```
+Both the table above and the boxplots below show that there are a significant amount of outliers in the lower scores. 
+```{r}
+ggplot(data3, aes(x = faculty, y = score)) +
+  geom_boxplot() +
+  labs(x = "Faculty", y = "Score") +
+  ggtitle("Boxplot of Scores by Faculty") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ faculty, ncol = 5, scales = "free_x")
+
+```
+```{r}
+
+# Function to identify outliers for each faculty group
+get_outliers <- function(x) {
+  outliers <- boxplot.stats(x)$out
+  return(outliers)
+}
+
+# Group data3 by faculty and identify outliers for each group
+outliers <- data3 %>%
+  group_by(faculty) %>%
+  filter(score %in% get_outliers(score)) %>%
+  ungroup()
+
+# Resetting row names for clarity
+rownames(outliers) <- NULL
+outliers <- outliers %>%
+  arrange(score)
+print(outliers)
+```
+Since the columns are arranged in order of the way the appear on the test, so it is easy to inspect for those students who abandoned the test. This process identifies nine test takers, which we remove. New data set is data4.
+
+```{r}
+
+values_to_exclude <- c("MANENG22231e222", "SOWENG22231e339", "SOWENG22231e338","LETENG22231e141", "SOWENG22231e296", "MANENG22231e233","SOWENG22231e331", "MANENG22231e252", "MANENG22231e220")
+
+# Filter out the rows with the specified values
+data4 <- data3 %>%
+  filter(!testtaker %in% values_to_exclude)
+
+# If you want to reset the row names for clarity
+rownames(data4) <- NULL
+checkcheck(data4)
+
+
+```
+Let's rerun the boxplots
+```{r}
+ggplot(data4, aes(x = faculty, y = score)) +
+  geom_boxplot() +
+  labs(x = "Faculty", y = "Score") +
+  ggtitle("Boxplot of Scores by Faculty") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ faculty, ncol = 5, scales = "free_x")
+
+```
+Violin charts with mean:
+```{r}
+# Calculate mean for each faculty group
+mean_data <- data4 %>%
+  group_by(faculty) %>%
+  summarise(mean_score = mean(score))
+
+# Plot the violin distribution charts with mean lines and text
+ggplot(data4, aes(x = faculty, y = score)) +
+  geom_violin(trim = FALSE) +
+  geom_point(data = mean_data, aes(x = faculty, y = mean_score), color = "red", size = 3) +
+  geom_text(data = mean_data, aes(x = faculty, y = mean_score + 1, label = round(mean_score, 2)),
+            vjust = -1, size = 3, color = "red", fontface = "bold") +
+  labs(x = "Faculty", y = "Score") +
+  ggtitle("Violin Distribution of Scores by Faculty") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ faculty, ncol = 5, scales = "free_x")
+
+```
+I want to determine which items have values for all faculties, that is, which are common items across these forms
+
+```{r}
+numanswers <- colSums(!is.na(data))
+itemnames <- 
+table(numanswers)
+```
+
+
+
+```{r}
+
+```
+
+
+

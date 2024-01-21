@@ -1,0 +1,237 @@
+---
+title: "Dictee"
+output: html_document
+date: "2023-08-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r retrieve data from csv}
+dictee <- read.csv("Dictee.csv")
+head(dictee)
+dictation <- read.csv("Dictation.csv")
+names <- c("X3", "X8", "X10", "X9", "X7", "X6", "X5", "X4", "X2", "X1", "Score")
+
+colnames(dictation) <- names
+head(dictation)
+```
+English Dication Loop - Create csv files for each question in dictation, csv files contain all unique answers and frequency / count of each. 
+```{r}
+
+
+# Loop through 1 to 10
+for (i in 1:10) {
+  # Construct the variable name
+  var_name <- names[i]
+  
+  # Get the value frequency table for the current variable
+  value_frequency <- table(dictation[[var_name]])
+  value_frequency_df <- as.data.frame(value_frequency)
+  colnames(value_frequency_df) <- c("Value", "Count")
+  sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+  
+  # Create a CSV file with the variable name
+  csv_file_name <- paste(var_name, ".csv", sep = "")
+  write.csv(sorted_value_frequency_df, file = csv_file_name, row.names = FALSE)
+  
+  # Print a message
+  cat("CSV file", csv_file_name, "created.\n")
+}
+
+
+```
+
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X1)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee01.csv", row.names = FALSE)
+
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X2)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee02.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X3)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee03.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X4)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee04.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X5)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee05.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X6)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee06.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X7)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee07.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X8)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee08.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X9)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee09.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Assuming dictee is your data frame
+# Use table to calculate value frequencies in dictee$X1
+value_frequency <- table(dictee$X10)
+
+# Convert the value frequency table into a data frame
+value_frequency_df <- as.data.frame(value_frequency)
+
+# Rename the columns for clarity
+colnames(value_frequency_df) <- c("Value", "Count")
+
+# Sort the data frame by Count in descending order
+sorted_value_frequency_df <- value_frequency_df[order(-value_frequency_df$Count), ]
+
+# Save the sorted data frame as a CSV file
+write.csv(sorted_value_frequency_df, "Dictee10.csv", row.names = FALSE)
+
+```

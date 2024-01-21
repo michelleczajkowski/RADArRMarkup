@@ -1,0 +1,138 @@
+---
+title: "ENG 22231e Section Analysis"
+output: html_document
+date: "2023-08-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary of Scores for English Language RADAr Oct 2022
+```{r import from excel, include=FALSE}
+# Load the required library
+library(readr)
+
+# Replace 'path/to/ENG22231eSections.csv' with the actual path to your CSV file
+file_path <- "C:/Users/mtcza/OneDrive/Documents/GitHub/RADArRMarkup/ENG22231eSections.csv"
+
+# Import the CSV file into a data frame
+data <- read.csv(file_path)
+
+data <- data[,2:19]
+
+maxscores <- c(20,19,8,7,10,6,6,12,10,14,12,2,2,2,4)
+
+
+```
+Data frame 'data' contains all test takers from October 2022 for the English RADAr, across five faculties (there is no English test for medicine). For each test taker the scores of each section are reported. There is also a column for faculty and one for total score. 
+```{r}
+dataselection <- data[,2:16]
+percs <- data.frame()
+for (i in 1:15) {
+  section <- dataselection[,i]/maxscores[i]
+  percs <- cbind(percs, section)
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r} 
+meanscores <- colMeans(dataselection)
+medianscores <- apply(dataselection, 2, median)
+sdmeanscores <- apply(dataselection, 2, function(x) sd(x) / sqrt(length(x)))
+itemnames <- colnames(dataselection)
+dataperc <- data.frame( medianscores, meanscores, sdmeanscores,maxscores)
+print(dataperc)
+
+dataperc$meanperc <- dataperc$meanscores/dataperc$maxscores
+```
+
+
+
+
+
+```{r}
+# Load required library
+library(ggplot2)
+
+# Create the box plot with mean value labels
+ggplot(data, aes(x = faculty, y = score)) +
+  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA) +
+  stat_summary(fun = "mean", geom = "text", vjust = -1, aes(label = round(..y.., 2)), color = "black") +
+  labs(title = "Distribution of Test Scores by Faculty",
+       x = "Faculty",
+       y = "Test Score") +
+  theme_minimal()
+
+
+```
+```{r}
+# Load required libraries
+library(dplyr)
+
+# Group data by faculty and calculate rounded statistics
+faculty_summary <- data %>%
+  group_by(faculty) %>%
+  summarise(
+    Min = round(min(score), 2),
+    Max = round(max(score), 2),
+    Median = round(median(score), 2),
+    Mean = round(mean(score), 2),
+    SD = round(sd(score), 2)
+  )
+
+# Print the summary table
+print(faculty_summary)
+
+```
+
+```{r}
+# Load the dplyr package
+library(dplyr)
+
+# Summarize columns 3 to 17 of 'data'
+summary_data <- data %>%
+  summarise(across(3:17, list(
+    min = min,
+    max = max,
+    median = median,
+    mean = mean,
+    sd = sd
+  )))
+
+# Print the summary table
+print(summary_data)
+# Assuming 'data' is your data frame
+
+# Calculate summary statistics for columns 3 to 17
+summary_data <- data.frame(
+  Min = apply(data[, 3:17], 2, min),
+  Max = apply(data[, 3:17], 2, max),
+  Median = apply(data[, 3:17], 2, median),
+  Mean = apply(data[, 3:17], 2, mean),
+  SD_of_Mean = apply(data[, 3:17], 2, function(x) sd(x) / sqrt(length(x)))
+)
+
+# Create a new data frame 'summary'
+summary <- data.frame(
+  Variable = names(summary_data),
+  summary_data
+)
+
+# Print the 'summary' data frame
+print(summary)
+
+```
+

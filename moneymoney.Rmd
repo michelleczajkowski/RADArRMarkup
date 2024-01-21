@@ -1,0 +1,106 @@
+---
+title: "Money Money"
+output: html_document
+date: "2023-08-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("Wordcloud2")
+```
+
+## Money Money 2022 and 2023 upload 
+
+Load 2022
+```{r load 2022}
+# Load the readxl package
+library(readxl)
+
+# Set the file path
+file_path <- "C:/Users/mtcza/OneDrive/Documents/Invoices/Banking and Taxes/Money Money/Money 2022 FINAL - Balance Reset.xlsx"
+
+# Read the first sheet of the Excel file into a data frame
+money2022 <- read_excel(file_path, sheet = 1)
+money2022 <- money2022[-1, ]
+money2022 <- money2022[, 4:9]
+money2022 <- money2022[1:494,]
+namesofcols <- c("date", "what", "category", "jaap", "michelle", "total")
+colnames(money2022) <- namesofcols
+head(money2022)
+```
+Load 2023
+```{r}
+# Load the readxl package
+library(readxl)
+
+# Set the file path
+file_path <- "C:/Users/mtcza/OneDrive/Documents/Invoices/Banking and Taxes/Money Money/Money 2023 in progress.xlsx"
+
+# Read the first sheet of the Excel file into a data frame
+money2023 <- read_excel(file_path, sheet = 1)
+money2023 <- money2023[-1, ]
+money2023 <- money2023[, 3:8]
+money2023 <- money2023[1:275,]
+colnames(money2023)<-namesofcols
+# Print the first few rows of the data frame to verify
+head(money2023)
+
+```
+Load 2021 and 2020
+```{r}
+
+# Set the file path
+file_path <- "C:/Users/mtcza/OneDrive/Documents/Invoices/Banking and Taxes/Money Money/Money 2021 FINAL - Balance Reset.xlsx"
+
+# Read the first sheet of the Excel file into a data frame
+money2021 <- read_excel(file_path, sheet = 1)
+money2021 <- money2021[-1, ]
+money2021 <- money2021[, 3:8]
+money2021 <- money2021[,-6]
+money2021 <- money2021[1:533,]
+money2021$TOT <- rowSums(money2021[, c("Michelle...7", "Jaap...6")], na.rm = TRUE)
+colnames(money2021) <- namesofcols
+money2021$data <- as.Date(money2021$data - 1, origin = "1899-12-30")
+head(money2021)
+# Set the file path
+file_path <- "C:/Users/mtcza/OneDrive/Documents/Invoices/Banking and Taxes/Money Money/Money 2020 FINAL - Balance Reset.xlsx"
+
+# Read the first sheet of the Excel file into a data frame
+money2020 <- read_excel(file_path, sheet = 1)
+money2020 <- money2020[-1, ]
+money2020 <- money2020[, 1:9]
+money2020 <- money2020[1:340,]
+money2020$TOT <- rowSums(money2020[, c("Michelle...7", "Jaap...6")], na.rm = TRUE)
+
+
+
+```
+
+Clouds
+```{r}
+
+
+# Combine the $What columns from all four data sets into a single character vector
+all_words <- c(money2020$What, money2021$What, money2022$What, money2023$What)
+
+# Create a function to generate the word cloud
+generate_combined_wordcloud <- function(words) {
+  all_words <- paste(words, collapse = " ")
+  words <- strsplit(all_words, "\\s+")
+  word_freq <- table(na.omit(unlist(words)))
+  
+  wordcloud(names(word_freq), freq = word_freq, random.order = FALSE, main = "Combined Word Cloud")
+}
+
+# library
+library(wordcloud2) 
+ 
+# have a look to the example dataset
+# head(demoFreq)
+
+# Basic plot
+wordcloud2(data=word_freq, size=1,minRotation = -pi/6, maxRotation = -pi/6, rotateRatio = 1)
+
+
+```
+
